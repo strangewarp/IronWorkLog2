@@ -1,0 +1,18 @@
+
+IRON WORK LOG 2
+
+Standalone work-tracking system, for LOVE2D.
+
+STILL UNDER DEVELOPMENT
+STILL UNDER DEVELOPMENT
+STILL UNDER DEVELOPMENT
+STILL UNDER DEVELOPMENT
+EVERYTHING IS BUGGY DO NOT USE DO NOT USE
+DO NOT USE DO NOT USE DO NOT USE
+THIS IS JUST A BACKUP
+THIS IS JUST A BACKUP
+THIS IS JUST A BACKUP
+
+Special thanks to Kenny Shields, creator of Loveframes.
+
+Special thanks to Jeffrey Friedl and Eike Decker, creators of SHA1.lua.
