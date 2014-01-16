@@ -14,5 +14,3 @@ THIS IS JUST A BACKUP
 THIS IS JUST A BACKUP
 
 Special thanks to Kenny Shields, creator of Loveframes.
-
-Special thanks to Jeffrey Friedl and Eike Decker, creators of SHA1.lua.

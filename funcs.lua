@@ -29,6 +29,37 @@ return {
     end
     return nil
   end,
+  dateToColor = function(dtab)
+    local out = { }
+    for k, v in ipairs(dtab) do
+      out[k] = round(v * 21.25, 0)
+    end
+    return out
+  end,
+  getDayColors = function(dyear, dmonth, dday)
+    local hex = dateToColor({
+      dyear,
+      dmonth,
+      dday
+    })
+    if COLORBLIND_MODE then
+      local greyhex = math.floor((hex[1] + hex[2] + hex[3]) / 3)
+      for i = 1, 3 do
+        hex[i] = greyhex
+      end
+    end
+    local invhex
+    do
+      local _accum_0 = { }
+      local _len_0 = 1
+      for i = 1, 3 do
+        _accum_0[_len_0] = (hex[i] + 127) % 256
+        _len_0 = _len_0 + 1
+      end
+      invhex = _accum_0
+    end
+    return hex, invhex
+  end,
   dateCountBack = function(iyear, imonth, iday)
     iday = iday - 1
     if iday < 1 then
@@ -187,13 +218,6 @@ return {
   uploadFilesToWebspace = function()
     return nil
   end,
-  clearDynamicGUI = function(grid, tabs)
-    grid:Remove()
-    for i = 1, #STATS_PERIODS do
-      tabs[i]:RemoveTab()
-    end
-    return nil
-  end,
   buildInputFrame = function()
     local inputframe = loveframes.Create("frame")
     inputframe:SetName("Input")
@@ -229,7 +253,8 @@ return {
           uinput[kk]:SetText(vv)
         end
         local data = taskToData(data, IN_TASK)
-        updateGUI()
+        clearDynamicGUI()
+        updateDataAndGUI()
         return nil
       end
     end
@@ -244,7 +269,8 @@ return {
         uinput[k]:SetText(v)
       end
       local data = taskToData(IN_TASK)
-      updateGUI()
+      clearDynamicGUI()
+      updateDataAndGUI()
       return nil
     end
     local removebutton = loveframes.Create("button", inputframe)
@@ -254,7 +280,8 @@ return {
     removebutton:SetText("Delete Latest Entry")
     removebutton.OnClick = function(object)
       removeLatestTask()
-      updateGUI()
+      clearDynamicGUI()
+      updateDataAndGUI()
       return nil
     end
     local publishbutton = loveframes.Create("button", inputframe)
@@ -282,29 +309,29 @@ return {
     return nil
   end,
   buildMetricsFrame = function()
-    local frame = loveframes.Create("frame")
-    frame:SetName("Metrics")
-    frame:SetPos(200, 0)
-    frame:SetSize(600, 300)
-    frame:SetDraggable(false)
-    frame:ShowCloseButton(false)
-    return frame
+    metricsframe = loveframes.Create("frame")
+    metricsframe:SetName("Metrics")
+    metricsframe:SetPos(200, 0)
+    metricsframe:SetSize(600, 300)
+    metricsframe:SetDraggable(false)
+    metricsframe:ShowCloseButton(false)
+    return nil
   end,
   buildMetricsTabs = function(eradata, scoredata, date, frame)
-    local tabs = loveframes.Create("tabs", frame)
-    tabs:SetPos(5, 30)
-    tabs:SetSize(590, 265)
-    tabs:SetPadding(0)
+    local metricstabs = loveframes.Create("tabs", frame)
+    metricstabs:SetPos(5, 30)
+    metricstabs:SetSize(590, 265)
+    metricstabs:SetPadding(0)
     local panels = { }
     for k, p in ipairs(STATS_PERIODS) do
-      panels[k] = loveframes.Create("panel")
+      panels[k] = loveframes.Create("panel", metricstabs)
       panels[k].Draw = function(object)
         love.graphics.setColor(30, 30, 30, 255)
         love.graphics.rectangle("fill", object:GetX(), object:GetY(), object:GetWidth(), object:GetHeight())
         return nil
       end
       buildMetricsGrid(eradata[p], p, date, panels[k])
-      local gradetext = loveframes.Create("text", panels[p])
+      local gradetext = loveframes.Create("text", panels[k])
       gradetext:SetPos(400, 35)
       gradetext:SetText({
         255,
@@ -312,7 +339,7 @@ return {
         255,
         "Grade: " .. scoredata[p].grade
       })
-      local hourtext = loveframes.Create("text", panels[p])
+      local hourtext = loveframes.Create("text", panels[k])
       hourtext:SetPos(400, 100)
       hourtext:SetText({
         255,
@@ -320,7 +347,7 @@ return {
         255,
         "Hour Scores: " .. scoredata[p].hourmean .. " - " .. scoredata[p].houradj
       })
-      local entrytext = loveframes.Create("text", panels[p])
+      local entrytext = loveframes.Create("text", panels[k])
       entrytext:SetPos(400, 165)
       entrytext:SetText({
         255,
@@ -328,9 +355,9 @@ return {
         255,
         "Entry Scores: " .. scoredata[p].entrymean .. " - " .. scoredata[p].entryadj
       })
-      tabs:AddTab((p .. "-DAY"), panels[k], _, _)
+      metricstabs:AddTab((p .. "-DAY"), panels[k], _, _)
     end
-    tabs:SwitchToTab(DEFAULT_TAB)
+    metricstabs:SwitchToTab(DEFAULT_TAB)
     return nil
   end,
   buildMetricsGrid = function(pdata, period, date, frame)
@@ -338,19 +365,10 @@ return {
     grid:SetPos(0, 0)
     grid:SetColumns(period)
     grid:SetRows(#BAR_THRESHOLDS)
-    grid:SetCellWidth((350 - (2 * period)) / period)
-    grid:SetCellHeight((240 - (2 * #BAR_THRESHOLDS)) / #BAR_THRESHOLDS)
-    grid:SetCellPadding(1)
+    grid:SetCellWidth(350 / period)
+    grid:SetCellHeight(240 / #BAR_THRESHOLDS)
+    grid:SetCellPadding(0)
     grid:SetItemAutoSize(true)
-    local fullhex = (COLORBLIND_MODE and {
-      170,
-      170,
-      170
-    }) or {
-      130,
-      230,
-      130
-    }
     local emptyhex = {
       60,
       60,
@@ -361,9 +379,12 @@ return {
     local iday = tonumber(date.day)
     for p = 1, period do
       for y, thresh in pairs(BAR_THRESHOLDS) do
+        local fullhex, fullinvhex = getDayColors(iyear, imonth, iday)
         local hex = emptyhex
+        local invhex = fullhex
         if pdata[iyear][imonth][iday].hours >= thresh then
           hex = fullhex
+          invhex = fullinvhex
         end
         local f = loveframes.Create("frame")
         f:SetName("")
@@ -388,7 +409,7 @@ return {
           ", " .. iyear .. " ::: " .. pdata[iyear][imonth][iday].hours .. " hours worked"
         })
         tip.Draw = function(object)
-          love.graphics.setColor(hex[1], hex[2], hex[3], 255)
+          love.graphics.setColor(invhex[1], invhex[2], invhex[3], 255)
           love.graphics.rectangle("fill", object:GetX(), object:GetY(), object:GetWidth(), object:GetHeight())
           return nil
         end
@@ -399,16 +420,16 @@ return {
     return nil
   end,
   buildEntriesFrame = function()
-    local frame = loveframes.Create("frame")
-    frame:SetName("Entries")
-    frame:SetPos(0, 300)
-    frame:SetSize(800, 400)
-    frame:SetDraggable(false)
-    frame:ShowCloseButton(false)
-    return frame
+    entriesframe = loveframes.Create("frame")
+    entriesframe:SetName("Entries")
+    entriesframe:SetPos(0, 300)
+    entriesframe:SetSize(800, 400)
+    entriesframe:SetDraggable(false)
+    entriesframe:ShowCloseButton(false)
+    return nil
   end,
   buildEntriesGrid = function(data, container)
-    local cols = 40
+    local cols = ENTRIES_COLUMNS
     local cwidth = (container:GetWidth() / cols) - 2
     local grid = loveframes.Create("grid", container)
     grid:SetPos(0, 30)
@@ -420,42 +441,11 @@ return {
     grid:SetItemAutoSize(true)
     for k, v in pairs(data) do
       local d = os.date('*t', v.time)
-      local hexdate = string.rep("0", 2 - #tostring(d.day)) .. d.day .. string.rep("0", 2 - #tostring(d.month)) .. d.month .. d.year
+      local hex, invhex = getDayColors(d.year, d.month, d.day)
       local fulldate = MONTH_NAMES[d.month] .. " " .. d.day .. DAY_SUFFIXES[d.day] .. ", " .. d.year
       local fulltime = string.rep("0", 2 - #tostring(d.hour)) .. d.hour .. ":" .. string.rep("0", 2 - #tostring(d.min)) .. d.min
       local task = v.task .. " on " .. v.project .. " for " .. v.hours .. " hours"
-      local outsha = sha1(hexdate)
-      local hex
-      do
-        local _accum_0 = { }
-        local _len_0 = 1
-        for i = 1, 3 do
-          _accum_0[_len_0] = tonumber(string.sub(outsha, ((i - 1) * 2) + 1, i * 2), 16)
-          _len_0 = _len_0 + 1
-        end
-        hex = _accum_0
-      end
-      local invhex
-      do
-        local _accum_0 = { }
-        local _len_0 = 1
-        for i = 1, 3 do
-          _accum_0[_len_0] = (hex[i] + 127) % 256
-          _len_0 = _len_0 + 1
-        end
-        invhex = _accum_0
-      end
-      hex = (COLORBLIND_MODE and {
-        hex[1],
-        hex[1],
-        hex[1]
-      }) or hex
-      invhex = (COLORBLIND_MODE and {
-        invhex[1],
-        invhex[1],
-        invhex[1]
-      }) or invhex
-      local frame = loveframes.Create("frame")
+      local frame = loveframes.Create("frame", grid)
       frame:SetName("")
       frame:SetSize(20, 20)
       frame:SetDraggable(false)
@@ -465,7 +455,7 @@ return {
         love.graphics.rectangle("fill", object:GetX(), object:GetY(), object:GetWidth(), object:GetHeight())
         return nil
       end
-      local tip = loveframes.Create("tooltip")
+      local tip = loveframes.Create("tooltip", frame)
       tip:SetObject(frame)
       tip:SetFollowCursor(false)
       tip:SetX(container:GetX())
@@ -482,6 +472,20 @@ return {
       end
       grid:AddItem(frame, math.floor((k - 1) / cols) + 1, ((k - 1) % cols) + 1)
     end
+    return nil
+  end,
+  clearDynamicGUI = function()
+    metricsframe:Remove()
+    entriesframe:Remove()
+    return nil
+  end,
+  updateDataAndGUI = function()
+    local date = os.date('*t')
+    local _, eradata, scoredata = generateMetrics(date)
+    buildMetricsFrame()
+    buildMetricsTabs(eradata, scoredata, date, metricsframe)
+    buildEntriesFrame()
+    buildEntriesGrid(data, entriesframe)
     return nil
   end
 }

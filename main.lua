@@ -1,6 +1,5 @@
 love.load = function()
   require("loveframes")
-  require("sha1")
   local socket = require("socket")
   local funcs = require("funcs")
   local prefs = require("prefs")
@@ -13,12 +12,8 @@ love.load = function()
     ""
   }
   local date = os.date('*t')
-  local timedata, eradata, scoredata = generateMetrics(date)
-  local inputframe = buildInputFrame()
-  local metricsframe = buildMetricsFrame()
-  buildMetricsTabs(eradata, scoredata, date, metricsframe)
-  local entriesframe = buildEntriesFrame()
-  buildEntriesGrid(data, entriesframe)
+  buildInputFrame()
+  updateDataAndGUI()
   return nil
 end
 love.update = function(dt)

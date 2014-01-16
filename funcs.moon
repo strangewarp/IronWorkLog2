@@ -19,6 +19,24 @@ return {
 		_G[k] = v for k, v in pairs tab
 		nil
 
+	-- Convert a date to a HEX value
+	dateToColor: (dtab using nil) ->
+		out = {}
+		for k, v in ipairs dtab
+			out[k] = round(v * 21.25, 0)
+		out
+
+	-- Get two complementary colors based on the current date
+	getDayColors: (dyear, dmonth, dday using COLORBLIND_MODE) ->
+
+		hex = dateToColor {dyear, dmonth, dday}
+		if COLORBLIND_MODE
+			greyhex = math.floor((hex[1] + hex[2] + hex[3]) / 3)
+			hex[i] = greyhex for i = 1, 3
+		invhex = [(hex[i] + 127) % 256 for i = 1, 3]
+
+		hex, invhex
+
 	-- Count backwards by 1 day from an arbitrary date
 	dateCountBack: (iyear, imonth, iday using nil) ->
 
@@ -195,14 +213,6 @@ return {
 
 		nil
 
-	-- Clear all GUI elements that need to be changed on a data-update
-	clearDynamicGUI: (grid, tabs using STATS_PERIODS) ->
-
-		grid\Remove!
-		tabs[i]\RemoveTab! for i = 1, #STATS_PERIODS
-
-		nil
-
 	-- Create input window
 	buildInputFrame: (using INPUT_NAMES) ->
 
@@ -236,7 +246,8 @@ return {
 					IN_TASK[kk] = uinput[kk]\GetText!
 					uinput[kk]\SetText vv
 				data = taskToData data, IN_TASK
-				updateGUI!
+				clearDynamicGUI!
+				updateDataAndGUI!
 				nil
 
 		submitbutton = loveframes.Create("button", inputframe)
@@ -250,7 +261,8 @@ return {
 				IN_TASK[k] = uinput[k]\GetText!
 				uinput[k]\SetText v
 			data = taskToData IN_TASK
-			updateGUI!
+			clearDynamicGUI!
+			updateDataAndGUI!
 			nil
 
 		removebutton = loveframes.Create("button", inputframe)
@@ -261,7 +273,8 @@ return {
 
 		removebutton.OnClick = (object using nil) ->
 			removeLatestTask!
-			updateGUI!
+			clearDynamicGUI!
+			updateDataAndGUI!
 			nil
 		
 		publishbutton = loveframes.Create("button", inputframe)
@@ -293,27 +306,27 @@ return {
 	-- Create metrics window
 	buildMetricsFrame: (using nil) ->
 
-		frame = loveframes.Create("frame")
-		frame\SetName "Metrics"
-		frame\SetPos 200, 0
-		frame\SetSize 600, 300
-		frame\SetDraggable false
-		frame\ShowCloseButton false
+		export metricsframe = loveframes.Create "frame"
+		metricsframe\SetName "Metrics"
+		metricsframe\SetPos 200, 0
+		metricsframe\SetSize 600, 300
+		metricsframe\SetDraggable false
+		metricsframe\ShowCloseButton false
 
-		frame
+		nil
 
 	-- Create metrics tabs, and their contents
 	buildMetricsTabs: (eradata, scoredata, date, frame using STATS_PERIODS, DEFAULT_TAB) ->
 
-		tabs = loveframes.Create("tabs", frame)
-		tabs\SetPos 5, 30
-		tabs\SetSize 590, 265
-		tabs\SetPadding 0
+		metricstabs = loveframes.Create "tabs", frame
+		metricstabs\SetPos 5, 30
+		metricstabs\SetSize 590, 265
+		metricstabs\SetPadding 0
 
 		panels = {}
 		for k, p in ipairs STATS_PERIODS
 
-			panels[k] = loveframes.Create "panel"
+			panels[k] = loveframes.Create "panel", metricstabs
 			panels[k].Draw = (object using nil) ->
 				love.graphics.setColor(30, 30, 30, 255)
 				love.graphics.rectangle("fill", object\GetX!, object\GetY!, object\GetWidth!, object\GetHeight!)
@@ -321,21 +334,21 @@ return {
 
 			buildMetricsGrid eradata[p], p, date, panels[k]
 
-			gradetext = loveframes.Create "text", panels[p]
+			gradetext = loveframes.Create "text", panels[k]
 			gradetext\SetPos 400, 35
 			gradetext\SetText({255, 255, 255, "Grade: " .. scoredata[p].grade})
 
-			hourtext = loveframes.Create "text", panels[p]
+			hourtext = loveframes.Create "text", panels[k]
 			hourtext\SetPos 400, 100
 			hourtext\SetText({255, 255, 255, "Hour Scores: " .. scoredata[p].hourmean .. " - " .. scoredata[p].houradj})
 
-			entrytext = loveframes.Create "text", panels[p]
+			entrytext = loveframes.Create "text", panels[k]
 			entrytext\SetPos 400, 165
 			entrytext\SetText({255, 255, 255, "Entry Scores: " .. scoredata[p].entrymean .. " - " .. scoredata[p].entryadj})
 
-			tabs\AddTab (p .. "-DAY"), panels[k], _, _
+			metricstabs\AddTab (p .. "-DAY"), panels[k], _, _
 
-		tabs\SwitchToTab DEFAULT_TAB
+		metricstabs\SwitchToTab DEFAULT_TAB
 
 		nil
 
@@ -346,12 +359,11 @@ return {
 		grid\SetPos 0, 0
 		grid\SetColumns period
 		grid\SetRows #BAR_THRESHOLDS
-		grid\SetCellWidth (350 - (2 * period)) / period
-		grid\SetCellHeight (240 - (2 * #BAR_THRESHOLDS)) / #BAR_THRESHOLDS
-		grid\SetCellPadding 1
+		grid\SetCellWidth 350 / period
+		grid\SetCellHeight 240 / #BAR_THRESHOLDS
+		grid\SetCellPadding 0
 		grid\SetItemAutoSize true
 
-		fullhex = (COLORBLIND_MODE and {170, 170, 170}) or {130, 230, 130}
 		emptyhex = {60, 60, 60}
 
 		iyear = tonumber date.year
@@ -363,9 +375,12 @@ return {
 
 			for y, thresh in pairs BAR_THRESHOLDS
 
+				fullhex, fullinvhex = getDayColors iyear, imonth, iday
 				hex = emptyhex
+				invhex = fullhex
 				if pdata[iyear][imonth][iday].hours >= thresh
 					hex = fullhex
+					invhex = fullinvhex
 
 				f = loveframes.Create "frame"
 				f\SetName ""
@@ -382,7 +397,7 @@ return {
 				tip\SetPadding 10
 				tip\SetText {{0, 0, 0}, MONTH_NAMES[imonth] .. " " .. iday .. DAY_SUFFIXES[iday], ", " .. iyear .. " ::: " .. pdata[iyear][imonth][iday].hours .. " hours worked"}
 				tip.Draw = (object using nil) ->
-					love.graphics.setColor(hex[1], hex[2], hex[3], 255)
+					love.graphics.setColor(invhex[1], invhex[2], invhex[3], 255)
 					love.graphics.rectangle("fill", object\GetX!, object\GetY!, object\GetWidth!, object\GetHeight!)
 					nil
 
@@ -395,22 +410,22 @@ return {
 	-- Create entries window
 	buildEntriesFrame: (using nil) ->
 
-		frame = loveframes.Create("frame")
-		frame\SetName "Entries"
-		frame\SetPos 0, 300
-		frame\SetSize 800, 400
-		frame\SetDraggable false
-		frame\ShowCloseButton false
+		export entriesframe = loveframes.Create "frame"
+		entriesframe\SetName "Entries"
+		entriesframe\SetPos 0, 300
+		entriesframe\SetSize 800, 400
+		entriesframe\SetDraggable false
+		entriesframe\ShowCloseButton false
 
-		frame
+		nil
 
 	-- Create entries grid, and associated tooltips, and populate them with the relevant data
-	buildEntriesGrid: (data, container using COLORBLIND_MODE, MONTH_NAMES, DAY_SUFFIXES) ->
+	buildEntriesGrid: (data, container using COLORBLIND_MODE, MONTH_NAMES, DAY_SUFFIXES, ENTRIES_COLUMNS) ->
 
-		cols = 40
+		cols = ENTRIES_COLUMNS
 		cwidth = (container\GetWidth! / cols) - 2
 
-		grid = loveframes.Create("grid", container)
+		grid = loveframes.Create "grid", container
 		grid\SetPos 0, 30
 		grid\SetColumns cols
 		grid\SetRows math.ceil(#data / cols)
@@ -424,19 +439,16 @@ return {
 			-- Translate a given entry's timestamp into a date
 			d = os.date('*t', v.time)
 
-			-- Translate a given date into hex color values, using SHA hashing
-			hexdate = string.rep("0", 2 - #tostring(d.day)) .. d.day .. string.rep("0", 2 - #tostring(d.month)) .. d.month .. d.year
+			-- Translate a given date into color values
+			hex, invhex = getDayColors d.year, d.month, d.day
+
+			-- Make task data human-readable for tooltips
 			fulldate = MONTH_NAMES[d.month] .. " " .. d.day .. DAY_SUFFIXES[d.day] .. ", " .. d.year
 			fulltime = string.rep("0", 2 - #tostring(d.hour)) .. d.hour .. ":" .. string.rep("0", 2 - #tostring(d.min)) .. d.min
 			task = v.task .. " on " .. v.project .. " for " .. v.hours .. " hours"
-			outsha = sha1(hexdate)
-			hex = [tonumber(string.sub(outsha, ((i - 1) * 2) + 1, i * 2), 16) for i = 1, 3]
-			invhex = [(hex[i] + 127) % 256 for i = 1, 3]
-			hex = (COLORBLIND_MODE and {hex[1], hex[1], hex[1]}) or hex
-			invhex = (COLORBLIND_MODE and {invhex[1], invhex[1], invhex[1]}) or invhex
 
 			-- Create an entry's colorbox
-			frame = loveframes.Create "frame"
+			frame = loveframes.Create "frame", grid
 			frame\SetName ""
 			frame\SetSize 20, 20
 			frame\SetDraggable false
@@ -447,7 +459,7 @@ return {
 				nil
 
 			-- Create a colorbox's tooltip, containing a summary of the unit of work it represents
-			tip = loveframes.Create "tooltip"
+			tip = loveframes.Create "tooltip", frame
 			tip\SetObject frame
 			tip\SetFollowCursor false
 			tip\SetX container\GetX!
@@ -461,6 +473,29 @@ return {
 
 			-- Add the colorbox and tooltip to the grid
 			grid\AddItem frame, math.floor((k - 1) / cols) + 1, ((k - 1) % cols) + 1
+
+		nil
+
+	-- Clear current dynamic GUI elements
+	clearDynamicGUI: (using metricsframe, entriesframe) ->
+
+		metricsframe\Remove!
+		entriesframe\Remove!
+
+		nil
+
+	-- Update data tables, and build an updated GUI
+	updateDataAndGUI: (using nil) ->
+
+		date = os.date '*t'
+
+		_, eradata, scoredata = generateMetrics date
+
+		buildMetricsFrame!
+		buildMetricsTabs eradata, scoredata, date, metricsframe
+
+		buildEntriesFrame!
+		buildEntriesGrid data, entriesframe
 
 		nil
 

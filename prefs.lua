@@ -4,8 +4,7 @@ return {
   STATS_PERIODS = {
     7,
     15,
-    30,
-    60
+    30
   },
   DEFAULT_TAB = 1,
   STYLESHEET_FILE = "style.css",
@@ -77,8 +76,6 @@ return {
     }
   },
   BAR_THRESHOLDS = {
-    12,
-    11,
     10,
     9,
     8,
@@ -90,6 +87,7 @@ return {
     2,
     1
   },
+  ENTRIES_COLUMNS = 30,
   INPUT_NAMES = {
     "Task",
     "Project",

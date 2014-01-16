@@ -3,7 +3,6 @@ love.load = () ->
 
 	-- Load all libraries, functions, and preference variables
 	require "loveframes"
-	require "sha1"
 	socket = require "socket"
 	funcs = require "funcs"
 	prefs = require "prefs"
@@ -17,16 +16,9 @@ love.load = () ->
 
 	date = os.date '*t'
 
-	-- Get metrics from the archived data
-	timedata, eradata, scoredata = generateMetrics date
+	buildInputFrame!
 
-	inputframe = buildInputFrame!
-
-	metricsframe = buildMetricsFrame!
-	buildMetricsTabs eradata, scoredata, date, metricsframe
-
-	entriesframe = buildEntriesFrame!
-	buildEntriesGrid data, entriesframe
+	updateDataAndGUI!
 
 	nil
 
