@@ -1,11 +1,13 @@
 love.load = function()
   require("loveframes")
-  local socket = require("socket")
+  local ftp = require("socket.ftp")
+  local ltn12 = require("ltn12")
   local funcs = require("funcs")
   local prefs = require("prefs")
   data = require("data")
   funcs.tableToGlobals(funcs)
   tableToGlobals(prefs)
+  smallironfont = love.graphics.newImageFont("font.png", " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/():;%&`'*#=[]\"")
   IN_TASK = {
     "",
     "",

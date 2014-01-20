@@ -17,7 +17,7 @@ return {
 	HTML_OUTPUT_FILE: "index.html"
 
 	UPLOAD_FILES: {
-		"data.lua" -- It's wise to backup your data file, but this line isn't absolutely required
+		"data.lua"
 		"style.css"
 		"index.html"
 	}
@@ -61,6 +61,8 @@ return {
 
 	ENTRIES_COLUMNS: 30
 
+	ENTRIES_LIMIT: 500
+
 	INPUT_NAMES: {
 		"Task"
 		"Project"
@@ -83,13 +85,13 @@ return {
 	}
 
 	DAY_SUFFIXES: {
-		"st", "nd", "rd", "th", "th", -- 1st to 5th
-		"th", "th", "th", "th", "th", -- 6th to 10th
-		"th", "th", "th", "th", "th", -- 11th to 15th
-		"th", "th", "th", "th", "th", -- 16th to 20th
-		"st", "nd", "rd", "th", "th", -- 21st to 25th
-		"th", "th", "th", "th", "th", -- 26th to 30th
-		"st", -- 31st
+		"st", "nd", "rd", "th", "th",
+		"th", "th", "th", "th", "th",
+		"th", "th", "th", "th", "th",
+		"th", "th", "th", "th", "th",
+		"st", "nd", "rd", "th", "th",
+		"th", "th", "th", "th", "th",
+		"st",
 	}
 
 }

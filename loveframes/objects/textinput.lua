@@ -3,7 +3,7 @@
 	-- Copyright (c) 2013 Kenny Shields --
 --]]------------------------------------------------
 
--- textinput class
+-- textinput object
 local newobject = loveframes.NewObject("textinput", "loveframes_object_textinput", true)
 
 --[[---------------------------------------------------------
@@ -48,6 +48,7 @@ function newobject:initialize()
 	self.usable = {}
 	self.unusable = {}
 	self.lines = {""}
+	self.placeholder = ""
 	self.internals = {}
 	self.showindicator = true
 	self.focus = false
@@ -60,9 +61,7 @@ function newobject:initialize()
 	self.editable = true
 	self.internal = false
 	self.autoscroll = false
-	self.cursorset = false
 	self.masked = false
-	self.prevcursor = nil
 	self.OnEnter = nil
 	self.OnTextChanged = nil
 	self.OnFocusGained = nil
@@ -134,34 +133,13 @@ function newobject:update(dt)
 		self.alltextselected = false
 	end
 	
-	if version == "0.9.0" then
-		local cursorset = self.cursorset
-		if hover then
-			if not cursorset then
-				local curcursor = love.mouse.getCursor()
-				local newcursor = love.mouse.newCursor("ibeam")
-				love.mouse.setCursor(newcursor)
-				self.prevcursor = curcursor
-				self.cursorset = true
-			end
-		else
-			if cursorset then
-				local prevcursor = self.prevcursor
-				love.mouse.setCursor(prevcursor)
-				self.cursorset = false
-			end
-		end
-	end
-	
 	-- keydown check
 	if keydown ~= "none" then
-		local lctrl = love.keyboard.isDown("lctrl")
-		local rctrl = love.keyboard.isDown("rctrl")
 		if time > delay then
-			if (lctrl or rctrl) and keydown == "v" then
+			if (loveframes.util.IsCtrlDown()) and keydown == "v" then
 				self:Paste()
 			else
-				self:RunKey(keydown, unicode)
+				self:RunKey(keydown, unicode, true)
 			end
 			self.delay = time + repeatrate
 		end
@@ -495,8 +473,6 @@ function newobject:keypressed(key, unicode)
 	end
 	
 	local time = love.timer.getTime()
-	local lctrl = love.keyboard.isDown("lctrl")
-	local rctrl = love.keyboard.isDown("rctrl")
 	local focus = self.focus
 	local repeatdelay = self.repeatdelay
 	local alltextselected = self.alltextselected
@@ -506,7 +482,7 @@ function newobject:keypressed(key, unicode)
 	self.delay = time + repeatdelay
 	self.keydown = key
 	
-	if (lctrl or rctrl) and focus then
+	if (loveframes.util.IsCtrlDown()) and focus then
 		if key == "a" then
 			self.alltextselected = true
 		elseif key == "c" and alltextselected and version == "0.9.0" then
@@ -515,6 +491,15 @@ function newobject:keypressed(key, unicode)
 			love.system.setClipboardText(text)
 			if oncopy then
 				oncopy(self, text)
+			end
+		elseif key == "x" and alltextselected and version == "0.9.0" and editable then
+			local text = self:GetText()
+			local oncut = self.OnCut
+			love.system.setClipboardText(text)
+			if oncut then
+				oncut(self, text)
+			else
+				self:SetText("")
 			end
 		elseif key == "v" and version == "0.9.0" and editable then
 			self:Paste()
@@ -609,10 +594,10 @@ function newobject:RunKey(key, unicode, is_text)
 	local onenter = self.OnEnter
 	
 	if key == "left" then
-		local indicatorx = self.indicatorx
 		indicatornum = self.indicatornum
 		if not multiline then
 			self:MoveIndicator(-1)
+			local indicatorx = self.indicatorx
 			if indicatorx <= x and indicatornum ~= 0 then
 				local width = font:getWidth(text:sub(indicatornum, indicatornum + 1))
 				self.offsetx = offsetx - width
@@ -630,11 +615,17 @@ function newobject:RunKey(key, unicode, is_text)
 				self:MoveIndicator(-1)
 			end
 		end
+		if alltextselected then
+			self.line = 1
+			self.indicatornum = 0
+			self.alltextselected = false
+		end
+		return
 	elseif key == "right" then
-		local indicatorx = self.indicatorx
 		indicatornum = self.indicatornum
 		if not multiline then
 			self:MoveIndicator(1)
+			local indicatorx = self.indicatorx
 			if indicatorx >= (x + swidth) and indicatornum ~= #text then
 				local width = font:getWidth(text:sub(indicatornum, indicatornum))
 				self.offsetx = offsetx + width
@@ -651,6 +642,12 @@ function newobject:RunKey(key, unicode, is_text)
 				self:MoveIndicator(1)
 			end
 		end
+		if alltextselected then
+			self.line = #lines
+			self.indicatornum = lines[#lines]:len()
+			self.alltextselected = false
+		end
+		return
 	elseif key == "up" then
 		if multiline then
 			if line > 1 then
@@ -660,6 +657,7 @@ function newobject:RunKey(key, unicode, is_text)
 				end
 			end
 		end
+		return
 	elseif key == "down" then
 		if multiline then
 			if line < #lines then
@@ -669,6 +667,7 @@ function newobject:RunKey(key, unicode, is_text)
 				end
 			end
 		end
+		return
 	end
 	
 	if not editable then
@@ -784,7 +783,7 @@ function newobject:RunKey(key, unicode, is_text)
 		self.unicode = unicode
 		if unicode > 31 and unicode < 127 then
 			-- do not continue if the text limit has been reached or exceeded
-			if #text >= self.limit and self.limit ~= 0 then
+			if #text >= self.limit and self.limit ~= 0 and not alltextselected then
 				return
 			end
 			-- set the current key
@@ -856,6 +855,10 @@ function newobject:RunKey(key, unicode, is_text)
 				end
 			end
 		end
+	end
+	
+	if love._version == "0.9.0" then
+		self.unicode = 0
 	end
 	
 	local curtext = self:GetText()
@@ -1311,11 +1314,14 @@ function newobject:SetText(text)
 		else
 			self.lines = {""}
 		end
+		self.line = #self.lines
+		self.indicatornum = #self.lines[#self.lines]
 	else
 		text = text:gsub(string.char(92) .. string.char(110), "")
 		text = text:gsub(string.char(10), "")
 		self.lines = {text}
 		self.line = 1
+		self.indicatornum = #text
 	end
 	
 end
@@ -1810,8 +1816,10 @@ function newobject:Paste()
 	local usable = self.usable
 	local unusable = self.unusable
 	local limit = self.limit
+	local alltextselected = self.alltextselected
 	local onpaste = self.OnPaste
 	local ontextchanged = self.OnTextChanged
+	
 	if limit > 0 then
 		local curtext = self:GetText()
 		local curlength = curtext:len()
@@ -1840,6 +1848,7 @@ function newobject:Paste()
 	end
 	if alltextselected then
 		self:SetText(text)
+		self.alltextselected = false
 		if ontextchanged then
 			ontextchanged(self, text)
 		end
@@ -1970,5 +1979,25 @@ end
 function newobject:GetMaskChar()
 
 	return self.maskchar
+	
+end
+
+--[[---------------------------------------------------------
+	- func: SetPlaceholderText(text)
+	- desc: sets the object's placeholder text
+--]]---------------------------------------------------------
+function newobject:SetPlaceholderText(text)
+
+	self.placeholder = text
+	
+end
+
+--[[---------------------------------------------------------
+	- func: GetPlaceholderText()
+	- desc: gets the object's placeholder text
+--]]---------------------------------------------------------
+function newobject:GetPlaceholderText()
+
+	return self.placeholder
 	
 end

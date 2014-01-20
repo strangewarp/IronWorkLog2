@@ -3,7 +3,8 @@ love.load = () ->
 
 	-- Load all libraries, functions, and preference variables
 	require "loveframes"
-	socket = require "socket"
+	ftp = require "socket.ftp"
+	ltn12 = require "ltn12"
 	funcs = require "funcs"
 	prefs = require "prefs"
 
@@ -11,6 +12,8 @@ love.load = () ->
 
 	funcs.tableToGlobals(funcs)
 	tableToGlobals(prefs)
+
+	export smallironfont = love.graphics.newImageFont "font.png", " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/():;%&`'*#=[]\""
 
 	export IN_TASK = {"", "", ""}
 
@@ -21,8 +24,6 @@ love.load = () ->
 	updateDataAndGUI!
 
 	nil
-
-
 
 love.update = (dt using nil) ->
 	loveframes.update(dt)

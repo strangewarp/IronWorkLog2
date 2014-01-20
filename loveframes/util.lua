@@ -247,6 +247,7 @@ function loveframes.util.RemoveAll()
 	loveframes.base.internals = {}
 	
 	loveframes.hoverobject = false
+	loveframes.downobject = false
 	loveframes.modalobject = false
 	loveframes.inputobject = false
 	loveframes.hover = false
@@ -349,4 +350,27 @@ function loveframes.util.DeepCopy(orig)
         copy = orig
     end
     return copy
+end
+
+--[[---------------------------------------------------------
+	- func: loveframes.util.GetHoverObject()
+	- desc: returns loveframes.hoverobject
+--]]---------------------------------------------------------
+function loveframes.util.GetHoverObject()
+	
+	return loveframes.hoverobject
+	
+end
+
+--[[---------------------------------------------------------
+	- func: loveframes.util.IsCtrlDown()
+	- desc: checks for ctrl, for use with multiselect, copy,
+			paste, and such. On OS X it actually looks for cmd.
+--]]---------------------------------------------------------
+function loveframes.util.IsCtrlDown()
+	if love._os == "OS X" then
+		return love.keyboard.isDown("lmeta") or love.keyboard.isDown("rmeta") or
+			love.keyboard.isDown("lgui") or love.keyboard.isDown("rgui")
+	end
+	return love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl")
 end

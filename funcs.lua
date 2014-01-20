@@ -111,9 +111,10 @@ return {
     local iyear = tonumber(date.year)
     local imonth = tonumber(date.month)
     local iday = tonumber(date.day)
-    while #eradata[STATS_PERIODS[#STATS_PERIODS]] < STATS_PERIODS[#STATS_PERIODS] do
+    local entries = 0
+    while entries < STATS_PERIODS[#STATS_PERIODS] do
       for _, p in ipairs(STATS_PERIODS) do
-        if #eradata[p] < p then
+        if entries < p then
           eradata[p][iyear] = eradata[p][iyear] or { }
           eradata[p][iyear][imonth] = eradata[p][iyear][imonth] or { }
           eradata[p][iyear][imonth][iday] = eradata[p][iyear][imonth][iday] or {
@@ -129,6 +130,7 @@ return {
         end
       end
       iyear, imonth, iday = dateCountBack(iyear, imonth, iday)
+      entries = entries + 1
     end
     return eradata
   end,
@@ -230,6 +232,7 @@ return {
       uinput[k] = loveframes.Create("textinput", inputframe)
       uinput[k]:SetPos(5, (30 * k))
       uinput[k]:SetWidth(190)
+      uinput[k]:SetEditable(true)
       uinput[k]:SetText(v)
       uinput[k]:SetTabReplacement("")
       uinput[k].OnFocusGained = function(object)
@@ -238,19 +241,19 @@ return {
             uinput[kk]:SetText(vv)
           end
         end
-        uinput[k]:SetText("")
+        object:SetText("")
         return nil
       end
       uinput[k].OnFocusLost = function(object)
-        if #tostring(uinput[k]:GetText()) == 0 then
-          uinput[k]:SetText(v)
+        if #tostring(object:GetText()) == 0 then
+          object:SetText(v)
         end
         return nil
       end
       uinput[k].OnEnter = function(object)
         for kk, vv in pairs(INPUT_NAMES) do
-          IN_TASK[kk] = uinput[kk]:GetText()
-          uinput[kk]:SetText(vv)
+          IN_TASK[kk] = object:GetText()
+          object:SetText(vv)
         end
         local data = taskToData(data, IN_TASK)
         clearDynamicGUI()
@@ -276,7 +279,7 @@ return {
     local removebutton = loveframes.Create("button", inputframe)
     removebutton:SetPos(10, 185)
     removebutton:SetWidth(180)
-    removebutton:SetHeight(25)
+    removebutton:SetHeight(20)
     removebutton:SetText("Delete Latest Entry")
     removebutton.OnClick = function(object)
       removeLatestTask()
@@ -285,9 +288,9 @@ return {
       return nil
     end
     local publishbutton = loveframes.Create("button", inputframe)
-    publishbutton:SetPos(10, 225)
+    publishbutton:SetPos(10, 215)
     publishbutton:SetWidth(180)
-    publishbutton:SetHeight(25)
+    publishbutton:SetHeight(20)
     publishbutton:SetText("Publish To HTML")
     publishbutton.OnClick = function(object)
       for k, v in pairs(INPUT_NAMES) do
@@ -298,12 +301,20 @@ return {
       return nil
     end
     local uploadbutton = loveframes.Create("button", inputframe)
-    uploadbutton:SetPos(10, 255)
+    uploadbutton:SetPos(10, 240)
     uploadbutton:SetWidth(180)
-    uploadbutton:SetHeight(25)
+    uploadbutton:SetHeight(20)
     uploadbutton:SetText("FTP To Web")
     uploadbutton.OnClick = function(object)
       uploadFilesToWebspace()
+      return nil
+    end
+    local prefsbutton = loveframes.Create("button", inputframe)
+    prefsbutton:SetPos(100, 270)
+    prefsbutton:SetWidth(90)
+    prefsbutton:SetHeight(20)
+    prefsbutton:SetText("Preferences")
+    prefsbutton.OnClick = function(object)
       return nil
     end
     return nil
@@ -331,30 +342,16 @@ return {
         return nil
       end
       buildMetricsGrid(eradata[p], p, date, panels[k])
-      local gradetext = loveframes.Create("text", panels[k])
-      gradetext:SetPos(400, 35)
-      gradetext:SetText({
-        255,
-        255,
-        255,
-        "Grade: " .. scoredata[p].grade
-      })
-      local hourtext = loveframes.Create("text", panels[k])
-      hourtext:SetPos(400, 100)
-      hourtext:SetText({
-        255,
-        255,
-        255,
-        "Hour Scores: " .. scoredata[p].hourmean .. " - " .. scoredata[p].houradj
-      })
-      local entrytext = loveframes.Create("text", panels[k])
-      entrytext:SetPos(400, 165)
-      entrytext:SetText({
-        255,
-        255,
-        255,
-        "Entry Scores: " .. scoredata[p].entrymean .. " - " .. scoredata[p].entryadj
-      })
+      local stext = "Hours Worked: \n " .. scoredata[p].hours .. " : " .. round(scoredata[p].avghours, 2) .. "/day"
+      stext = stext .. (" \n  \n Hour Scores: \n " .. scoredata[p].hourmean .. ", " .. scoredata[p].houradj)
+      stext = stext .. (" \n  \n Entry Scores: \n " .. scoredata[p].entrymean .. ", " .. scoredata[p].entryadj)
+      stext = stext .. (" \n  \n Grade: " .. scoredata[p].grade)
+      local scoretext = loveframes.Create("text", panels[k])
+      scoretext:SetPos(360, 5)
+      scoretext:SetSize(230, 260)
+      scoretext:SetFont(smallironfont)
+      scoretext:SetIgnoreNewlines(false)
+      scoretext:SetText(stext)
       metricstabs:AddTab((p .. "-DAY"), panels[k], _, _)
     end
     metricstabs:SwitchToTab(DEFAULT_TAB)
@@ -379,12 +376,14 @@ return {
     local iday = tonumber(date.day)
     for p = 1, period do
       for y, thresh in pairs(BAR_THRESHOLDS) do
-        local fullhex, fullinvhex = getDayColors(iyear, imonth, iday)
+        local fullhex, invhex = getDayColors(iyear, imonth, iday)
         local hex = emptyhex
-        local invhex = fullhex
-        if pdata[iyear][imonth][iday].hours >= thresh then
-          hex = fullhex
-          invhex = fullinvhex
+        local exists = false
+        if (pdata[iyear] ~= nil) and (pdata[iyear][imonth] ~= nil) and (pdata[iyear][imonth][iday] ~= nil) then
+          exists = true
+          if pdata[iyear][imonth][iday].hours >= thresh then
+            hex = fullhex
+          end
         end
         local f = loveframes.Create("frame")
         f:SetName("")
@@ -400,16 +399,12 @@ return {
         tip:SetObject(f)
         tip:SetPadding(10)
         tip:SetText({
-          {
-            0,
-            0,
-            0
-          },
+          invhex,
           MONTH_NAMES[imonth] .. " " .. iday .. DAY_SUFFIXES[iday],
-          ", " .. iyear .. " ::: " .. pdata[iyear][imonth][iday].hours .. " hours worked"
+          ", " .. iyear .. " ::: " .. ((exists and pdata[iyear][imonth][iday].hours) or "0") .. " hours worked"
         })
         tip.Draw = function(object)
-          love.graphics.setColor(invhex[1], invhex[2], invhex[3], 255)
+          love.graphics.setColor(hex[1], hex[2], hex[3], 255)
           love.graphics.rectangle("fill", object:GetX(), object:GetY(), object:GetWidth(), object:GetHeight())
           return nil
         end
@@ -423,31 +418,30 @@ return {
     entriesframe = loveframes.Create("frame")
     entriesframe:SetName("Entries")
     entriesframe:SetPos(0, 300)
-    entriesframe:SetSize(800, 400)
+    entriesframe:SetSize(800, 300)
     entriesframe:SetDraggable(false)
     entriesframe:ShowCloseButton(false)
     return nil
   end,
-  buildEntriesGrid = function(data, container)
+  buildEntriesList = function(data, container)
+    local listscroll = loveframes.Create("list", container)
+    listscroll:EnableHorizontalStacking(true)
+    listscroll:SetPos(0, 35)
+    listscroll:SetSize(800, 265)
     local cols = ENTRIES_COLUMNS
-    local cwidth = (container:GetWidth() / cols) - 2
-    local grid = loveframes.Create("grid", container)
-    grid:SetPos(0, 30)
-    grid:SetColumns(cols)
-    grid:SetRows(math.ceil(#data / cols))
-    grid:SetCellWidth(cwidth)
-    grid:SetCellHeight(cwidth)
-    grid:SetCellPadding(1)
-    grid:SetItemAutoSize(true)
+    local cwidth = container:GetWidth() / cols
     for k, v in pairs(data) do
+      if k > ENTRIES_LIMIT then
+        break
+      end
       local d = os.date('*t', v.time)
       local hex, invhex = getDayColors(d.year, d.month, d.day)
       local fulldate = MONTH_NAMES[d.month] .. " " .. d.day .. DAY_SUFFIXES[d.day] .. ", " .. d.year
       local fulltime = string.rep("0", 2 - #tostring(d.hour)) .. d.hour .. ":" .. string.rep("0", 2 - #tostring(d.min)) .. d.min
       local task = v.task .. " on " .. v.project .. " for " .. v.hours .. " hours"
-      local frame = loveframes.Create("frame", grid)
+      local frame = loveframes.Create("frame", listscroll)
       frame:SetName("")
-      frame:SetSize(20, 20)
+      frame:SetSize(cwidth, cwidth)
       frame:SetDraggable(false)
       frame:ShowCloseButton(false)
       frame.Draw = function(object)
@@ -470,7 +464,7 @@ return {
         love.graphics.rectangle("fill", object:GetX(), object:GetY(), object:GetWidth(), object:GetHeight())
         return nil
       end
-      grid:AddItem(frame, math.floor((k - 1) / cols) + 1, ((k - 1) % cols) + 1)
+      listscroll:AddItem(frame)
     end
     return nil
   end,
@@ -485,7 +479,7 @@ return {
     buildMetricsFrame()
     buildMetricsTabs(eradata, scoredata, date, metricsframe)
     buildEntriesFrame()
-    buildEntriesGrid(data, entriesframe)
+    buildEntriesList(data, entriesframe)
     return nil
   end
 }

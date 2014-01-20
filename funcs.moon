@@ -88,12 +88,14 @@ return {
 		imonth = tonumber date.month
 		iday = tonumber date.day
 
-		-- While the current time-difference is shorter than that of the oldest entry...
-		while #eradata[STATS_PERIODS[#STATS_PERIODS]] < STATS_PERIODS[#STATS_PERIODS]
+		entries = 0
+
+		-- While the current number of entry-days is smaller than that of the largest metrics period...
+		while entries < STATS_PERIODS[#STATS_PERIODS]
 
 			-- Build tables for era-based metrics, one for each STATS_PERIODS entry
 			for _, p in ipairs STATS_PERIODS
-				if #eradata[p] < p
+				if entries < p
 					eradata[p][iyear] or= {}
 					eradata[p][iyear][imonth] or= {}
 					eradata[p][iyear][imonth][iday] or= {hours: 0, entries: 0}
@@ -101,6 +103,7 @@ return {
 						eradata[p][iyear][imonth][iday] = {hours: timedata[iyear][imonth][iday].hours, entries: timedata[iyear][imonth][iday].entries}
 
 			iyear, imonth, iday = dateCountBack iyear, imonth, iday
+			entries += 1
 
 		eradata
 
@@ -214,10 +217,9 @@ return {
 		nil
 
 	-- Create input window
-	buildInputFrame: (using INPUT_NAMES) ->
+	buildInputFrame: (using INPUT_NAMES, USABLE_CHARACTERS) ->
 
-		-- FIX THIS		
-		inputframe = loveframes.Create("frame")
+		inputframe = loveframes.Create "frame"
 		inputframe\SetName "Input"
 		inputframe\SetPos 0, 0
 		inputframe\SetSize 200, 300
@@ -226,31 +228,36 @@ return {
 
 		uinput = {}
 		for k, v in pairs INPUT_NAMES
-			uinput[k] = loveframes.Create("textinput", inputframe)
+
+			uinput[k] = loveframes.Create "textinput", inputframe
 			uinput[k]\SetPos 5, (30 * k)
 			uinput[k]\SetWidth 190
+			uinput[k]\SetEditable true
 			uinput[k]\SetText v
 			uinput[k]\SetTabReplacement ""
+
 			uinput[k].OnFocusGained = (object using nil) ->
 				for kk, vv in pairs INPUT_NAMES
 					if #tostring(uinput[kk]\GetText!) == 0
 						uinput[kk]\SetText vv
-				uinput[k]\SetText ""
+				object\SetText ""
 				nil
+
 			uinput[k].OnFocusLost = (object using nil) ->
-				if #tostring(uinput[k]\GetText!) == 0
-					uinput[k]\SetText v
+				if #tostring(object\GetText!) == 0
+					object\SetText v
 				nil
+
 			uinput[k].OnEnter = (object using nil) ->
 				for kk, vv in pairs INPUT_NAMES
-					IN_TASK[kk] = uinput[kk]\GetText!
-					uinput[kk]\SetText vv
+					IN_TASK[kk] = object\GetText!
+					object\SetText vv
 				data = taskToData data, IN_TASK
 				clearDynamicGUI!
 				updateDataAndGUI!
 				nil
 
-		submitbutton = loveframes.Create("button", inputframe)
+		submitbutton = loveframes.Create "button", inputframe
 		submitbutton\SetPos 10, 120
 		submitbutton\SetWidth 180
 		submitbutton\SetHeight 60
@@ -265,10 +272,10 @@ return {
 			updateDataAndGUI!
 			nil
 
-		removebutton = loveframes.Create("button", inputframe)
+		removebutton = loveframes.Create "button", inputframe
 		removebutton\SetPos 10, 185
 		removebutton\SetWidth 180
-		removebutton\SetHeight 25
+		removebutton\SetHeight 20
 		removebutton\SetText "Delete Latest Entry"
 
 		removebutton.OnClick = (object using nil) ->
@@ -277,10 +284,10 @@ return {
 			updateDataAndGUI!
 			nil
 		
-		publishbutton = loveframes.Create("button", inputframe)
-		publishbutton\SetPos 10, 225
+		publishbutton = loveframes.Create "button", inputframe
+		publishbutton\SetPos 10, 215
 		publishbutton\SetWidth 180
-		publishbutton\SetHeight 25
+		publishbutton\SetHeight 20
 		publishbutton\SetText "Publish To HTML"
 
 		publishbutton.OnClick = (object using nil) ->
@@ -290,14 +297,24 @@ return {
 			publishToHTML!
 			nil
 
-		uploadbutton = loveframes.Create("button", inputframe)
-		uploadbutton\SetPos 10, 255
+		uploadbutton = loveframes.Create "button", inputframe
+		uploadbutton\SetPos 10, 240
 		uploadbutton\SetWidth 180
-		uploadbutton\SetHeight 25
+		uploadbutton\SetHeight 20
 		uploadbutton\SetText "FTP To Web"
 		
 		uploadbutton.OnClick = (object using nil) ->
 			uploadFilesToWebspace!
+			nil
+
+		prefsbutton = loveframes.Create "button", inputframe
+		prefsbutton\SetPos 100, 270
+		prefsbutton\SetWidth 90
+		prefsbutton\SetHeight 20
+		prefsbutton\SetText "Preferences"
+
+		prefsbutton.OnClick = (object using nil) ->
+
 			nil
 
 		nil
@@ -316,7 +333,7 @@ return {
 		nil
 
 	-- Create metrics tabs, and their contents
-	buildMetricsTabs: (eradata, scoredata, date, frame using STATS_PERIODS, DEFAULT_TAB) ->
+	buildMetricsTabs: (eradata, scoredata, date, frame using STATS_PERIODS, DEFAULT_TAB, COLORBLIND_MODE) ->
 
 		metricstabs = loveframes.Create "tabs", frame
 		metricstabs\SetPos 5, 30
@@ -334,17 +351,17 @@ return {
 
 			buildMetricsGrid eradata[p], p, date, panels[k]
 
-			gradetext = loveframes.Create "text", panels[k]
-			gradetext\SetPos 400, 35
-			gradetext\SetText({255, 255, 255, "Grade: " .. scoredata[p].grade})
+			stext = "Hours Worked: \n " .. scoredata[p].hours .. " : " .. round(scoredata[p].avghours, 2) .. "/day"
+			stext ..= " \n  \n Hour Scores: \n " .. scoredata[p].hourmean .. ", " .. scoredata[p].houradj
+			stext ..= " \n  \n Entry Scores: \n " .. scoredata[p].entrymean .. ", " .. scoredata[p].entryadj
+			stext ..= " \n  \n Grade: " .. scoredata[p].grade
 
-			hourtext = loveframes.Create "text", panels[k]
-			hourtext\SetPos 400, 100
-			hourtext\SetText({255, 255, 255, "Hour Scores: " .. scoredata[p].hourmean .. " - " .. scoredata[p].houradj})
-
-			entrytext = loveframes.Create "text", panels[k]
-			entrytext\SetPos 400, 165
-			entrytext\SetText({255, 255, 255, "Entry Scores: " .. scoredata[p].entrymean .. " - " .. scoredata[p].entryadj})
+			scoretext = loveframes.Create "text", panels[k]
+			scoretext\SetPos 360, 5
+			scoretext\SetSize 230, 260
+			scoretext\SetFont smallironfont
+			scoretext\SetIgnoreNewlines false
+			scoretext\SetText stext
 
 			metricstabs\AddTab (p .. "-DAY"), panels[k], _, _
 
@@ -375,12 +392,13 @@ return {
 
 			for y, thresh in pairs BAR_THRESHOLDS
 
-				fullhex, fullinvhex = getDayColors iyear, imonth, iday
+				fullhex, invhex = getDayColors iyear, imonth, iday
 				hex = emptyhex
-				invhex = fullhex
-				if pdata[iyear][imonth][iday].hours >= thresh
-					hex = fullhex
-					invhex = fullinvhex
+				exists = false
+				if (pdata[iyear] ~= nil) and (pdata[iyear][imonth] ~= nil) and (pdata[iyear][imonth][iday] ~= nil)
+					exists = true
+					if pdata[iyear][imonth][iday].hours >= thresh
+						hex = fullhex
 
 				f = loveframes.Create "frame"
 				f\SetName ""
@@ -395,9 +413,9 @@ return {
 				tip = loveframes.Create "tooltip"
 				tip\SetObject f
 				tip\SetPadding 10
-				tip\SetText {{0, 0, 0}, MONTH_NAMES[imonth] .. " " .. iday .. DAY_SUFFIXES[iday], ", " .. iyear .. " ::: " .. pdata[iyear][imonth][iday].hours .. " hours worked"}
+				tip\SetText {invhex, MONTH_NAMES[imonth] .. " " .. iday .. DAY_SUFFIXES[iday], ", " .. iyear .. " ::: " .. ((exists and pdata[iyear][imonth][iday].hours) or "0") .. " hours worked"}
 				tip.Draw = (object using nil) ->
-					love.graphics.setColor(invhex[1], invhex[2], invhex[3], 255)
+					love.graphics.setColor(hex[1], hex[2], hex[3], 255)
 					love.graphics.rectangle("fill", object\GetX!, object\GetY!, object\GetWidth!, object\GetHeight!)
 					nil
 
@@ -413,28 +431,28 @@ return {
 		export entriesframe = loveframes.Create "frame"
 		entriesframe\SetName "Entries"
 		entriesframe\SetPos 0, 300
-		entriesframe\SetSize 800, 400
+		entriesframe\SetSize 800, 300
 		entriesframe\SetDraggable false
 		entriesframe\ShowCloseButton false
 
 		nil
 
 	-- Create entries grid, and associated tooltips, and populate them with the relevant data
-	buildEntriesGrid: (data, container using COLORBLIND_MODE, MONTH_NAMES, DAY_SUFFIXES, ENTRIES_COLUMNS) ->
+	buildEntriesList: (data, container using COLORBLIND_MODE, MONTH_NAMES, DAY_SUFFIXES, ENTRIES_COLUMNS) ->
+
+		listscroll = loveframes.Create "list", container
+		listscroll\EnableHorizontalStacking true
+		listscroll\SetPos 0, 35
+		listscroll\SetSize 800, 265
 
 		cols = ENTRIES_COLUMNS
-		cwidth = (container\GetWidth! / cols) - 2
-
-		grid = loveframes.Create "grid", container
-		grid\SetPos 0, 30
-		grid\SetColumns cols
-		grid\SetRows math.ceil(#data / cols)
-		grid\SetCellWidth cwidth
-		grid\SetCellHeight cwidth
-		grid\SetCellPadding 1
-		grid\SetItemAutoSize true
+		cwidth = container\GetWidth! / cols
 
 		for k, v in pairs data
+
+			-- If there are more data entries than ENTRIES_LIMIT, stop rendering past that point
+			if k > ENTRIES_LIMIT
+				break
 
 			-- Translate a given entry's timestamp into a date
 			d = os.date('*t', v.time)
@@ -448,9 +466,10 @@ return {
 			task = v.task .. " on " .. v.project .. " for " .. v.hours .. " hours"
 
 			-- Create an entry's colorbox
-			frame = loveframes.Create "frame", grid
+			--frame = loveframes.Create "frame", grid
+			frame = loveframes.Create "frame", listscroll
 			frame\SetName ""
-			frame\SetSize 20, 20
+			frame\SetSize cwidth, cwidth
 			frame\SetDraggable false
 			frame\ShowCloseButton false
 			frame.Draw = (object using nil) ->
@@ -472,7 +491,7 @@ return {
 				nil
 
 			-- Add the colorbox and tooltip to the grid
-			grid\AddItem frame, math.floor((k - 1) / cols) + 1, ((k - 1) % cols) + 1
+			listscroll\AddItem frame
 
 		nil
 
@@ -495,7 +514,7 @@ return {
 		buildMetricsTabs eradata, scoredata, date, metricsframe
 
 		buildEntriesFrame!
-		buildEntriesGrid data, entriesframe
+		buildEntriesList data, entriesframe
 
 		nil
 

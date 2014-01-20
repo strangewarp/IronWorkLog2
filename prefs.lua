@@ -88,6 +88,7 @@ return {
     1
   },
   ENTRIES_COLUMNS = 30,
+  ENTRIES_LIMIT = 500,
   INPUT_NAMES = {
     "Task",
     "Project",

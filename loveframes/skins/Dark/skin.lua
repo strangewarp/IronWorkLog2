@@ -38,6 +38,10 @@ local basecolor2  = basecolor:modup(5)
 local bordercolor = basecolor:modup(10)
 local accentcolor = rgb(0, 175, 0)
 
+-- directives
+skin.directives = {}
+skin.directives.text_default_color = textcolor
+
 -- controls
 skin.controls = {}
 
@@ -156,7 +160,7 @@ skin.controls.columnlistrow_text_hover_color        = textcolor
 skin.controls.columnlistrow_text_selected_color     = {255, 255, 255, 255}
 
 -- modalbackground
-skin.controls.modalbackground_body_color            = {255, 255, 255, 100}
+skin.controls.modalbackground_body_color            = {0, 0, 0, 180}
 
 -- linenumberspanel
 skin.controls.linenumberspanel_text_color           = textcolor
