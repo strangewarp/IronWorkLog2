@@ -9,10 +9,33 @@ return {
 				else t2[k] = v
 		t2
 
+	-- Convert an arbitrary table into the contents of a Lua table-file
+	deepTableToString: (t = {}, depth = 0 using nil) ->
+
+		out = ""
+		dplus = depth + 1
+
+		for k, v in pairs t
+			putk = "[" .. k .. "]"
+			if type(k) == "string"
+				putk = "[\"" .. k .. "\"]"
+			if type(v) == "table"
+				out ..= string.rep("\t", dplus) .. putk .. " = {\n"
+				out ..= deepTableToString(v, dplus)
+				out ..= string.rep("\t", dplus) .. "},\n"
+			else
+				out ..= string.rep("\t", dplus) .. putk .. " = " .. (((type(v) == "string") and ("\"" .. v .. "\"")) or tostring(v)) .. ",\n"
+
+		if depth == 0
+			out = "return {\n\n" .. out .. "\n\n}\n"
+
+		out
+
+
 	-- Round number num, at decimal place idp
 	round: (num, idp = 0 using nil) ->
 		mult = 10 ^ idp
-		math.floor(num * mult + 0.5) / mult
+		math.floor((num * mult) + 0.5) / mult
 
 	-- Convert a table's contents to globals
 	tableToGlobals: (tab using nil) ->
@@ -23,14 +46,14 @@ return {
 	dateToColor: (dtab using nil) ->
 		out = {}
 		for k, v in ipairs dtab
-			out[k] = round(v * 21.25, 0)
+			out[k] = round(v * 21.25, 0) % 256
 		out
 
 	-- Get two complementary colors based on the current date
-	getDayColors: (dyear, dmonth, dday using COLORBLIND_MODE) ->
+	getDayColors: (dyear, dmonth, dday using PREFS) ->
 
 		hex = dateToColor {dyear, dmonth, dday}
-		if COLORBLIND_MODE
+		if PREFS.COLORBLIND_MODE
 			greyhex = math.floor((hex[1] + hex[2] + hex[3]) / 3)
 			hex[i] = greyhex for i = 1, 3
 		invhex = [(hex[i] + 127) % 256 for i = 1, 3]
@@ -79,10 +102,12 @@ return {
 		timedata
 
 	-- Build tables for every date between the present and the earliest entry, inclusive
-	timedataToEradata: (timedata, date using STATS_PERIODS) ->
+	timedataToEradata: (timedata, date using PREFS) ->
+
+		speriods = PREFS.STATS_PERIODS
 
 		eradata = {}
-		eradata[p] = {} for _, p in pairs STATS_PERIODS
+		eradata[p] = {} for _, p in pairs speriods
 
 		iyear = tonumber date.year
 		imonth = tonumber date.month
@@ -91,10 +116,10 @@ return {
 		entries = 0
 
 		-- While the current number of entry-days is smaller than that of the largest metrics period...
-		while entries < STATS_PERIODS[#STATS_PERIODS]
+		while entries < speriods[#speriods]
 
 			-- Build tables for era-based metrics, one for each STATS_PERIODS entry
-			for _, p in ipairs STATS_PERIODS
+			for _, p in ipairs speriods
 				if entries < p
 					eradata[p][iyear] or= {}
 					eradata[p][iyear][imonth] or= {}
@@ -108,11 +133,11 @@ return {
 		eradata
 
 	-- Create scores for every eradata period
-	eradataToScoredata: (eradata, date using STATS_PERIODS, GRADE_THRESHOLDS) ->
+	eradataToScoredata: (eradata, date using PREFS) ->
 
 		scoredata = {}
 
-		for _, p in pairs STATS_PERIODS
+		for _, p in pairs PREFS.STATS_PERIODS
 
 			-- Gather total hours, entries, successful-days, and average-hours from the eradata, for each given era
 			scoredata[p] = {hours: 0, entries: 0, successdays: 0}
@@ -127,13 +152,13 @@ return {
 
 			-- Assign a grade-score to each scoredata period
 			scoredata[p].grade = "???"
-			for i = 1, #GRADE_THRESHOLDS
-				if scoredata[p].avghours >= GRADE_THRESHOLDS[i][2]
-					scoredata[p].grade = GRADE_THRESHOLDS[i][1]
+			for i = 1, #PREFS.GRADE_THRESHOLDS
+				if scoredata[p].avghours >= PREFS.GRADE_THRESHOLDS[i][2]
+					scoredata[p].grade = PREFS.GRADE_THRESHOLDS[i][1]
 					break
 
 			-- Generate Earned Iron Average scores for each scoredata period
-			h = scoredata[p].hours / GRADE_THRESHOLDS[1][2]
+			h = scoredata[p].hours / PREFS.GRADE_THRESHOLDS[1][2]
 			y = scoredata[p].entries
 			z = scoredata[p].successdays
 			scoredata[p].hourmean = round((2 * p) / (h + z), 2)
@@ -169,7 +194,7 @@ return {
 		outdata ..= "}"
 
 		-- Save the Lua file to LOVE2D's save directory
-		f = love.filesystem.newFile("data.lua")
+		f = love.filesystem.newFile "data.lua"
 		f\open "w"
 		f\write outdata
 		f\close!
@@ -206,18 +231,260 @@ return {
 
 		nil
 
-	-- TODO: Publish current data as an HTML file
-	publishToHTML: (using nil) ->
+	-- Save all global prefs to a 
+	savePrefs: (using PREFS) ->
+
+		outprefs = deepTableToString PREFS
+
+		f = love.filesystem.newFile "prefs.lua"
+		f\open "w"
+		f\write outprefs
+		f\close!
+
+		nil
+
+	-- Publish current data as an HTML file
+	publishToHTML: (using data, HTML_TEMPLATE, PREFS) ->
+		
+		date = os.date '*t'
+
+		timedata, eradata, scoredata = generateMetrics date
+
+		curhex, curinvhex = getDayColors tonumber(date.year), tonumber(date.month), tonumber(date.day)
+
+		outhtml ..= "<div id='holder'>\n"
+
+		scoretiles = {
+			"IRON", "WORK", "LOG", "",
+			"Updated",
+			PREFS.MONTH_NAMES[tonumber date.month],
+			date.day .. PREFS.DAY_SUFFIXES[tonumber date.day] .. ",",
+			date.year,
+			"", "", "", ""
+		}
+
+		for k, v in pairs PREFS.STATS_PERIODS
+
+			table.insert(scoretiles, "") for i = 1, 3
+			table.insert(scoretiles, #scoretiles - 2, v .. "-DAY:")
+
+			table.insert(scoretiles, "Work Hours:")
+			table.insert(scoretiles, scoredata[v].hours)
+			table.insert(scoretiles, "Tasks:")
+			table.insert(scoretiles, scoredata[v].entries)
+
+			table.insert(scoretiles, "Hour Avg:")
+			table.insert(scoretiles, scoredata[v].hourmean)
+			table.insert(scoretiles, scoredata[v].houradj)
+			table.insert(scoretiles, "")
+
+			table.insert(scoretiles, "Entry Avg:")
+			table.insert(scoretiles, scoredata[v].entrymean)
+			table.insert(scoretiles, scoredata[v].entryadj)
+			table.insert(scoretiles, "")
+
+			table.insert(scoretiles, "Grade:")
+			table.insert(scoretiles, scoredata[v].grade)
+			table.insert(scoretiles, "") for i = 1, 2
+
+			table.insert(scoretiles, "------") for i = 1, 4
+
+		for k, v in ipairs scoretiles
+
+			outhtml ..= "<div class='scorechunk' style='background-color:#" .. curhex .. ";border-color:#" .. curhex .. ";'>"
+			outhtml ..= "<p style='color:#" .. curinvhex .. ";'>"
+			outhtml ..= v
+			outhtml ..= "</p>"
+			outhtml ..= "</div>\n"
+
+
+
+		for k, v in pairs data
+
+			if k > PREFS.ENTRIES_LIMIT
+				break
+
+
+
+
+		outhtml ..= "</div>\n"
+
+
 
 		nil
 
 	-- TODO: FTP all current UPLOAD_FILES to the user's webspace
-	uploadFilesToWebspace: (using UPLOAD_FILES, FTP_PREFS) ->
+	uploadFilesToWebspace: (using PREFS) ->
+
+
+
+		nil
+
+	-- Build the pop-up prefs window
+	buildPrefsWindow: (using PREFS) ->
+
+		prefsframe = loveframes.Create "frame"
+		prefsframe\SetName "Preferences"
+		prefsframe\SetPos 0, 0
+		prefsframe\SetSize 800, 600
+		prefsframe\SetDraggable false
+		prefsframe\ShowCloseButton true
+
+		colorcheck = loveframes.Create "checkbox", prefsframe
+		colorcheck\SetPos 50, 50
+		colorcheck\SetText "Colorblind Mode"
+
+		deftabinput = loveframes.Create "textinput", prefsframe
+		deftabinput\SetPos 50, 100
+		deftabinput\SetWidth 200
+		deftabinput\SetText PREFS.DEFAULT_TAB
+
+		deftabtext = loveframes.Create "text", prefsframe
+		deftabtext\SetPos 255, 100
+		deftabtext\SetText "Default Metrics Tab"
+
+		htmlfileinput = loveframes.Create "textinput", prefsframe
+		htmlfileinput\SetPos 50, 130
+		htmlfileinput\SetWidth 200
+		htmlfileinput\SetText PREFS.HTML_OUTPUT_FILE
+
+		htmlfiletext = loveframes.Create "text", prefsframe
+		htmlfiletext\SetPos 255, 130
+		htmlfiletext\SetText "HTML Output File"
+
+		ftphostinput = loveframes.Create "textinput", prefsframe
+		ftphostinput\SetPos 50, 160
+		ftphostinput\SetWidth 200
+		ftphostinput\SetText PREFS.FTP_HOST
+
+		ftphosttext = loveframes.Create "text", prefsframe
+		ftphosttext\SetPos 255, 160
+		ftphosttext\SetText "FTP Host"
+
+		ftpuserinput = loveframes.Create "textinput", prefsframe
+		ftpuserinput\SetPos 50, 190
+		ftpuserinput\SetWidth 200
+		ftpuserinput\SetText PREFS.FTP_USER
+
+		ftpusertext = loveframes.Create "text", prefsframe
+		ftpusertext\SetPos 255, 190
+		ftpusertext\SetText "FTP User"
+
+		ftppassinput = loveframes.Create "textinput", prefsframe
+		ftppassinput\SetPos 50, 220
+		ftppassinput\SetWidth 200
+		ftppassinput\SetMaskChar "*"
+		ftppassinput\SetText PREFS.FTP_PASS
+
+		ftppasstext = loveframes.Create "text", prefsframe
+		ftppasstext\SetPos 255, 220
+		ftppasstext\SetText "FTP Password"
+
+		ftppathinput = loveframes.Create "textinput", prefsframe
+		ftppathinput\SetPos 50, 250
+		ftppathinput\SetWidth 200
+		ftppathinput\SetText PREFS.FTP_PATH
+
+		ftppathtext = loveframes.Create "text", prefsframe
+		ftppathtext\SetPos 255, 250
+		ftppathtext\SetText "FTP Path"
+
+		ftpcommandinput = loveframes.Create "textinput", prefsframe
+		ftpcommandinput\SetPos 50, 280
+		ftpcommandinput\SetWidth 200
+		ftpcommandinput\SetText PREFS.FTP_COMMAND
+
+		ftpcommandtext = loveframes.Create "text", prefsframe
+		ftpcommandtext\SetPos 255, 280
+		ftpcommandtext\SetText "FTP Command"
+
+		entrycolsinput = loveframes.Create "textinput", prefsframe
+		entrycolsinput\SetPos 50, 310
+		entrycolsinput\SetWidth 200
+		entrycolsinput\SetText PREFS.ENTRIES_COLUMNS
+
+		entrycolstext = loveframes.Create "text", prefsframe
+		entrycolstext\SetPos 255, 310
+		entrycolstext\SetText "Entries-Panel Columns"
+
+		entrylimitinput = loveframes.Create "textinput", prefsframe
+		entrylimitinput\SetPos 50, 340
+		entrylimitinput\SetWidth 200
+		entrylimitinput\SetText PREFS.ENTRIES_LIMIT
+
+		entrylimittext = loveframes.Create "text", prefsframe
+		entrylimittext\SetPos 255, 340
+		entrylimittext\SetText "Max Entries-Panel Items"
+
+		applybutton = loveframes.Create "button", prefsframe
+		applybutton\SetPos 490, 495
+		applybutton\SetSize 150, 100
+		applybutton\SetText "Apply"
+
+		applybutton.OnClick = (object using nil) ->
+
+			cblnd = colorcheck\GetChecked!
+			dtab = deftabinput\GetText!
+			hfile = htmlfileinput\GetText!
+			ecols = entrycolsinput\GetText!
+			elim = entrylimitinput\GetText!
+			fhost = ftphostinput\GetText!
+			fuser = ftpuserinput\GetText!
+			fpass = ftppassinput\GetText!
+			fpath = ftppathinput\GetText!
+			fcomm = ftpcommandinput\GetText!
+
+			-- Sanitize the new default-tab number
+			dtab = (string.match(dtab, '%d+') and dtab) or 1
+			dtab = tonumber dtab
+			dtab = math.min dtab, #PREFS.STATS_PERIODS
+
+			-- Put a ".html" onto the HTML filename if one isn't there already
+			if hfile\sub(-5) ~= ".html"
+				hfile ..= ".html"
+
+			-- Sanitize the new entries-panel GUI limits
+			ecols = (string.match(ecols, '%d+') and ecols) or 30
+			ecols = tonumber ecols
+			ecols = math.min ecols, 50
+			elim = (string.match(elim, '%d+') and elim) or 500
+			elim = tonumber elim
+			elim = math.min elim, 1000
+
+			-- Pass new data into prefs
+			PREFS.COLORBLIND_MODE = cblnd
+			PREFS.DEFAULT_TAB = dtab
+			PREFS.HTML_OUTPUT_FILE = hfile
+			PREFS.ENTRIES_COLUMNS = ecols
+			PREFS.ENTRIES_LIMIT = elim
+			PREFS.FTP_HOST = fhost
+			PREFS.FTP_USER = fuser
+			PREFS.FTP_PASS = fpass
+			PREFS.FTP_PATH = fpath
+			PREFS.FTP_COMMAND = fcomm
+
+			savePrefs!
+
+			prefsframe\Remove!
+			clearDynamicGUI!
+
+			updateDataAndGUI!
+
+			nil
+
+		closebutton = loveframes.Create "button", prefsframe
+		closebutton\SetPos 645, 495
+		closebutton\SetSize 150, 100
+		closebutton\SetText "Close"
+
+		closebutton.OnClick = (object using nil) ->
+			prefsframe\Remove!
+			nil
 
 		nil
 
 	-- Create input window
-	buildInputFrame: (using INPUT_NAMES, USABLE_CHARACTERS) ->
+	buildInputFrame: (using PREFS) ->
 
 		inputframe = loveframes.Create "frame"
 		inputframe\SetName "Input"
@@ -227,7 +494,7 @@ return {
 		inputframe\ShowCloseButton false
 
 		uinput = {}
-		for k, v in pairs INPUT_NAMES
+		for k, v in pairs PREFS.INPUT_NAMES
 
 			uinput[k] = loveframes.Create "textinput", inputframe
 			uinput[k]\SetPos 5, (30 * k)
@@ -237,7 +504,7 @@ return {
 			uinput[k]\SetTabReplacement ""
 
 			uinput[k].OnFocusGained = (object using nil) ->
-				for kk, vv in pairs INPUT_NAMES
+				for kk, vv in pairs PREFS.INPUT_NAMES
 					if #tostring(uinput[kk]\GetText!) == 0
 						uinput[kk]\SetText vv
 				object\SetText ""
@@ -249,7 +516,7 @@ return {
 				nil
 
 			uinput[k].OnEnter = (object using nil) ->
-				for kk, vv in pairs INPUT_NAMES
+				for kk, vv in pairs PREFS.INPUT_NAMES
 					IN_TASK[kk] = object\GetText!
 					object\SetText vv
 				data = taskToData data, IN_TASK
@@ -259,12 +526,11 @@ return {
 
 		submitbutton = loveframes.Create "button", inputframe
 		submitbutton\SetPos 10, 120
-		submitbutton\SetWidth 180
-		submitbutton\SetHeight 60
+		submitbutton\SetSize 180, 60
 		submitbutton\SetText "Submit"
 
 		submitbutton.OnClick = (object using nil) ->
-			for k, v in pairs INPUT_NAMES
+			for k, v in pairs PREFS.INPUT_NAMES
 				IN_TASK[k] = uinput[k]\GetText!
 				uinput[k]\SetText v
 			data = taskToData IN_TASK
@@ -274,8 +540,7 @@ return {
 
 		removebutton = loveframes.Create "button", inputframe
 		removebutton\SetPos 10, 185
-		removebutton\SetWidth 180
-		removebutton\SetHeight 20
+		removebutton\SetSize 180, 20
 		removebutton\SetText "Delete Latest Entry"
 
 		removebutton.OnClick = (object using nil) ->
@@ -286,12 +551,11 @@ return {
 		
 		publishbutton = loveframes.Create "button", inputframe
 		publishbutton\SetPos 10, 215
-		publishbutton\SetWidth 180
-		publishbutton\SetHeight 20
+		publishbutton\SetSize 180, 20
 		publishbutton\SetText "Publish To HTML"
 
 		publishbutton.OnClick = (object using nil) ->
-			for k, v in pairs INPUT_NAMES
+			for k, v in pairs PREFS.INPUT_NAMES
 				IN_TASK[k] = uinput[k]\GetText!
 				uinput[k]\SetText v
 			publishToHTML!
@@ -299,8 +563,7 @@ return {
 
 		uploadbutton = loveframes.Create "button", inputframe
 		uploadbutton\SetPos 10, 240
-		uploadbutton\SetWidth 180
-		uploadbutton\SetHeight 20
+		uploadbutton\SetSize 180, 20
 		uploadbutton\SetText "FTP To Web"
 		
 		uploadbutton.OnClick = (object using nil) ->
@@ -309,16 +572,14 @@ return {
 
 		prefsbutton = loveframes.Create "button", inputframe
 		prefsbutton\SetPos 100, 270
-		prefsbutton\SetWidth 90
-		prefsbutton\SetHeight 20
+		prefsbutton\SetSize 90, 20
 		prefsbutton\SetText "Preferences"
 
 		prefsbutton.OnClick = (object using nil) ->
-
+			buildPrefsWindow!
 			nil
 
 		nil
-
 
 	-- Create metrics window
 	buildMetricsFrame: (using nil) ->
@@ -333,51 +594,52 @@ return {
 		nil
 
 	-- Create metrics tabs, and their contents
-	buildMetricsTabs: (eradata, scoredata, date, frame using STATS_PERIODS, DEFAULT_TAB, COLORBLIND_MODE) ->
-
+	buildMetricsTabs: (eradata, scoredata, date, frame using PREFS, SMALL_IRON_FONT) ->
+		
 		metricstabs = loveframes.Create "tabs", frame
 		metricstabs\SetPos 5, 30
 		metricstabs\SetSize 590, 265
 		metricstabs\SetPadding 0
 
-		panels = {}
-		for k, p in ipairs STATS_PERIODS
+		tabimage = "tabimage.png"
 
-			panels[k] = loveframes.Create "panel", metricstabs
-			panels[k].Draw = (object using nil) ->
+		for k, p in pairs PREFS.STATS_PERIODS
+
+			panel = loveframes.Create "panel", metricstabs
+			panel.Draw = (object using nil) ->
 				love.graphics.setColor(30, 30, 30, 255)
 				love.graphics.rectangle("fill", object\GetX!, object\GetY!, object\GetWidth!, object\GetHeight!)
 				nil
 
-			buildMetricsGrid eradata[p], p, date, panels[k]
+			buildMetricsGrid eradata[p], p, date, panel
 
 			stext = "Hours Worked: \n " .. scoredata[p].hours .. " : " .. round(scoredata[p].avghours, 2) .. "/day"
 			stext ..= " \n  \n Hour Scores: \n " .. scoredata[p].hourmean .. ", " .. scoredata[p].houradj
 			stext ..= " \n  \n Entry Scores: \n " .. scoredata[p].entrymean .. ", " .. scoredata[p].entryadj
 			stext ..= " \n  \n Grade: " .. scoredata[p].grade
 
-			scoretext = loveframes.Create "text", panels[k]
+			scoretext = loveframes.Create "text", panel
 			scoretext\SetPos 360, 5
 			scoretext\SetSize 230, 260
-			scoretext\SetFont smallironfont
+			scoretext\SetFont SMALL_IRON_FONT
 			scoretext\SetIgnoreNewlines false
 			scoretext\SetText stext
 
-			metricstabs\AddTab (p .. "-DAY"), panels[k], _, _
+			metricstabs\AddTab (p .. "-DAY"), panel, (p .. "-DAY"), tabimage
 
-		metricstabs\SwitchToTab DEFAULT_TAB
+		metricstabs\SwitchToTab PREFS.DEFAULT_TAB
 
 		nil
 
 	-- Build the metrics grid within a given metrics-period tab
-	buildMetricsGrid: (pdata, period, date, frame using GRADE_THRESHOLDS, BAR_THRESHOLDS, COLORBLIND_MODE, MONTH_NAMES, DAY_SUFFIXES) ->
+	buildMetricsGrid: (pdata, period, date, frame using PREFS) ->
 
 		grid = loveframes.Create "grid", frame
 		grid\SetPos 0, 0
 		grid\SetColumns period
-		grid\SetRows #BAR_THRESHOLDS
+		grid\SetRows #PREFS.BAR_THRESHOLDS
 		grid\SetCellWidth 350 / period
-		grid\SetCellHeight 240 / #BAR_THRESHOLDS
+		grid\SetCellHeight 240 / #PREFS.BAR_THRESHOLDS
 		grid\SetCellPadding 0
 		grid\SetItemAutoSize true
 
@@ -390,10 +652,10 @@ return {
 		-- Draw metrics bars and score text
 		for p = 1, period
 
-			for y, thresh in pairs BAR_THRESHOLDS
+			for y, thresh in pairs PREFS.BAR_THRESHOLDS
 
 				fullhex, invhex = getDayColors iyear, imonth, iday
-				hex = emptyhex
+				hex = (PREFS.COLORBLIND_MODE and invhex) or emptyhex
 				exists = false
 				if (pdata[iyear] ~= nil) and (pdata[iyear][imonth] ~= nil) and (pdata[iyear][imonth][iday] ~= nil)
 					exists = true
@@ -413,7 +675,7 @@ return {
 				tip = loveframes.Create "tooltip"
 				tip\SetObject f
 				tip\SetPadding 10
-				tip\SetText {invhex, MONTH_NAMES[imonth] .. " " .. iday .. DAY_SUFFIXES[iday], ", " .. iyear .. " ::: " .. ((exists and pdata[iyear][imonth][iday].hours) or "0") .. " hours worked"}
+				tip\SetText {invhex, PREFS.MONTH_NAMES[imonth] .. " " .. iday .. PREFS.DAY_SUFFIXES[iday], ", " .. iyear .. " ::: " .. ((exists and pdata[iyear][imonth][iday].hours) or "0") .. " hours worked"}
 				tip.Draw = (object using nil) ->
 					love.graphics.setColor(hex[1], hex[2], hex[3], 255)
 					love.graphics.rectangle("fill", object\GetX!, object\GetY!, object\GetWidth!, object\GetHeight!)
@@ -438,20 +700,20 @@ return {
 		nil
 
 	-- Create entries grid, and associated tooltips, and populate them with the relevant data
-	buildEntriesList: (data, container using COLORBLIND_MODE, MONTH_NAMES, DAY_SUFFIXES, ENTRIES_COLUMNS) ->
+	buildEntriesList: (container using data, PREFS) ->
 
 		listscroll = loveframes.Create "list", container
 		listscroll\EnableHorizontalStacking true
 		listscroll\SetPos 0, 35
 		listscroll\SetSize 800, 265
 
-		cols = ENTRIES_COLUMNS
+		cols = PREFS.ENTRIES_COLUMNS
 		cwidth = container\GetWidth! / cols
 
 		for k, v in pairs data
 
 			-- If there are more data entries than ENTRIES_LIMIT, stop rendering past that point
-			if k > ENTRIES_LIMIT
+			if k > PREFS.ENTRIES_LIMIT
 				break
 
 			-- Translate a given entry's timestamp into a date
@@ -461,7 +723,7 @@ return {
 			hex, invhex = getDayColors d.year, d.month, d.day
 
 			-- Make task data human-readable for tooltips
-			fulldate = MONTH_NAMES[d.month] .. " " .. d.day .. DAY_SUFFIXES[d.day] .. ", " .. d.year
+			fulldate = PREFS.MONTH_NAMES[d.month] .. " " .. d.day .. PREFS.DAY_SUFFIXES[d.day] .. ", " .. d.year
 			fulltime = string.rep("0", 2 - #tostring(d.hour)) .. d.hour .. ":" .. string.rep("0", 2 - #tostring(d.min)) .. d.min
 			task = v.task .. " on " .. v.project .. " for " .. v.hours .. " hours"
 
@@ -508,13 +770,13 @@ return {
 
 		date = os.date '*t'
 
-		_, eradata, scoredata = generateMetrics date
+		timedata, eradata, scoredata = generateMetrics date
 
 		buildMetricsFrame!
 		buildMetricsTabs eradata, scoredata, date, metricsframe
 
 		buildEntriesFrame!
-		buildEntriesList data, entriesframe
+		buildEntriesList entriesframe
 
 		nil
 

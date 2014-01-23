@@ -1,19 +1,50 @@
 love.load = function()
   require("loveframes")
-  local ftp = require("socket.ftp")
-  local ltn12 = require("ltn12")
+  ftp = require("socket.ftp")
+  ltn12 = require("ltn12")
   local funcs = require("funcs")
-  local prefs = require("prefs")
+  funcs:tableToGlobals()
+  PREFS = require("defaultprefs")
+  local defaultcss = require("defaultstyle")
+  local defaulthtml = require("defaulthtml")
+  local dfiles = {
+    {
+      "prefs.lua",
+      "return {}"
+    },
+    {
+      "data.lua",
+      "return {}"
+    },
+    {
+      "style.css",
+      defaultcss.STYLESHEET
+    },
+    {
+      "template.html",
+      defaulthtml.HTMLDOC
+    }
+  }
+  for _, v in pairs(dfiles) do
+    if not love.filesystem.exists(v[1]) then
+      local f = love.filesystem.newFile(v[1])
+      f:open("w")
+      f:write(v[2])
+      f:close()
+    end
+  end
+  HTML_TEMPLATE, _ = love.filesystem.read("template.html")
+  local userprefs = require("prefs")
+  for k, v in pairs(userprefs) do
+    PREFS[k] = v
+  end
   data = require("data")
-  funcs.tableToGlobals(funcs)
-  tableToGlobals(prefs)
-  smallironfont = love.graphics.newImageFont("font.png", " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/():;%&`'*#=[]\"")
+  SMALL_IRON_FONT = love.graphics.newImageFont("font.png", " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/():;%&`'*#=[]\"")
   IN_TASK = {
     "",
     "",
     ""
   }
-  local date = os.date('*t')
   buildInputFrame()
   updateDataAndGUI()
   return nil

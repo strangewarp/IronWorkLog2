@@ -16,12 +16,39 @@ return {
     end
     return t2
   end,
+  deepTableToString = function(t, depth)
+    if t == nil then
+      t = { }
+    end
+    if depth == nil then
+      depth = 0
+    end
+    local out = ""
+    local dplus = depth + 1
+    for k, v in pairs(t) do
+      local putk = "[" .. k .. "]"
+      if type(k) == "string" then
+        putk = "[\"" .. k .. "\"]"
+      end
+      if type(v) == "table" then
+        out = out .. (string.rep("\t", dplus) .. putk .. " = {\n")
+        out = out .. deepTableToString(v, dplus)
+        out = out .. (string.rep("\t", dplus) .. "},\n")
+      else
+        out = out .. (string.rep("\t", dplus) .. putk .. " = " .. (((type(v) == "string") and ("\"" .. v .. "\"")) or tostring(v)) .. ",\n")
+      end
+    end
+    if depth == 0 then
+      out = "return {\n\n" .. out .. "\n\n}\n"
+    end
+    return out
+  end,
   round = function(num, idp)
     if idp == nil then
       idp = 0
     end
     local mult = 10 ^ idp
-    return math.floor(num * mult + 0.5) / mult
+    return math.floor((num * mult) + 0.5) / mult
   end,
   tableToGlobals = function(tab)
     for k, v in pairs(tab) do
@@ -32,7 +59,7 @@ return {
   dateToColor = function(dtab)
     local out = { }
     for k, v in ipairs(dtab) do
-      out[k] = round(v * 21.25, 0)
+      out[k] = round(v * 21.25, 0) % 256
     end
     return out
   end,
@@ -42,7 +69,7 @@ return {
       dmonth,
       dday
     })
-    if COLORBLIND_MODE then
+    if PREFS.COLORBLIND_MODE then
       local greyhex = math.floor((hex[1] + hex[2] + hex[3]) / 3)
       for i = 1, 3 do
         hex[i] = greyhex
@@ -104,16 +131,17 @@ return {
     return timedata
   end,
   timedataToEradata = function(timedata, date)
+    local speriods = PREFS.STATS_PERIODS
     local eradata = { }
-    for _, p in pairs(STATS_PERIODS) do
+    for _, p in pairs(speriods) do
       eradata[p] = { }
     end
     local iyear = tonumber(date.year)
     local imonth = tonumber(date.month)
     local iday = tonumber(date.day)
     local entries = 0
-    while entries < STATS_PERIODS[#STATS_PERIODS] do
-      for _, p in ipairs(STATS_PERIODS) do
+    while entries < speriods[#speriods] do
+      for _, p in ipairs(speriods) do
         if entries < p then
           eradata[p][iyear] = eradata[p][iyear] or { }
           eradata[p][iyear][imonth] = eradata[p][iyear][imonth] or { }
@@ -136,7 +164,7 @@ return {
   end,
   eradataToScoredata = function(eradata, date)
     local scoredata = { }
-    for _, p in pairs(STATS_PERIODS) do
+    for _, p in pairs(PREFS.STATS_PERIODS) do
       scoredata[p] = {
         hours = 0,
         entries = 0,
@@ -155,13 +183,13 @@ return {
       end
       scoredata[p].avghours = scoredata[p].hours / p
       scoredata[p].grade = "???"
-      for i = 1, #GRADE_THRESHOLDS do
-        if scoredata[p].avghours >= GRADE_THRESHOLDS[i][2] then
-          scoredata[p].grade = GRADE_THRESHOLDS[i][1]
+      for i = 1, #PREFS.GRADE_THRESHOLDS do
+        if scoredata[p].avghours >= PREFS.GRADE_THRESHOLDS[i][2] then
+          scoredata[p].grade = PREFS.GRADE_THRESHOLDS[i][1]
           break
         end
       end
-      local h = scoredata[p].hours / GRADE_THRESHOLDS[1][2]
+      local h = scoredata[p].hours / PREFS.GRADE_THRESHOLDS[1][2]
       local y = scoredata[p].entries
       local z = scoredata[p].successdays
       scoredata[p].hourmean = round((2 * p) / (h + z), 2)
@@ -214,10 +242,202 @@ return {
     updateArchivedData(data)
     return nil
   end,
+  savePrefs = function()
+    local outprefs = deepTableToString(PREFS)
+    local f = love.filesystem.newFile("prefs.lua")
+    f:open("w")
+    f:write(outprefs)
+    f:close()
+    return nil
+  end,
   publishToHTML = function()
+    local date = os.date('*t')
+    local timedata, eradata, scoredata = generateMetrics(date)
+    local curhex, curinvhex = getDayColors(tonumber(date.year), tonumber(date.month), tonumber(date.day))
+    local outhtml = outhtml .. "<div id='holder'>\n"
+    local scoretiles = {
+      "IRON",
+      "WORK",
+      "LOG",
+      "",
+      "Updated",
+      PREFS.MONTH_NAMES[tonumber(date.month)],
+      date.day .. PREFS.DAY_SUFFIXES[tonumber(date.day)] .. ",",
+      date.year,
+      "",
+      "",
+      "",
+      ""
+    }
+    for k, v in pairs(PREFS.STATS_PERIODS) do
+      for i = 1, 3 do
+        table.insert(scoretiles, "")
+      end
+      table.insert(scoretiles, #scoretiles - 2, v .. "-DAY:")
+      table.insert(scoretiles, "Work Hours:")
+      table.insert(scoretiles, scoredata[v].hours)
+      table.insert(scoretiles, "Tasks:")
+      table.insert(scoretiles, scoredata[v].entries)
+      table.insert(scoretiles, "Hour Avg:")
+      table.insert(scoretiles, scoredata[v].hourmean)
+      table.insert(scoretiles, scoredata[v].houradj)
+      table.insert(scoretiles, "")
+      table.insert(scoretiles, "Entry Avg:")
+      table.insert(scoretiles, scoredata[v].entrymean)
+      table.insert(scoretiles, scoredata[v].entryadj)
+      table.insert(scoretiles, "")
+      table.insert(scoretiles, "Grade:")
+      table.insert(scoretiles, scoredata[v].grade)
+      for i = 1, 2 do
+        table.insert(scoretiles, "")
+      end
+      for i = 1, 4 do
+        table.insert(scoretiles, "------")
+      end
+    end
+    for k, v in ipairs(scoretiles) do
+      outhtml = outhtml .. ("<div class='scorechunk' style='background-color:#" .. curhex .. ";border-color:#" .. curhex .. ";'>")
+      outhtml = outhtml .. ("<p style='color:#" .. curinvhex .. ";'>")
+      outhtml = outhtml .. v
+      outhtml = outhtml .. "</p>"
+      outhtml = outhtml .. "</div>\n"
+    end
+    for k, v in pairs(data) do
+      if k > PREFS.ENTRIES_LIMIT then
+        break
+      end
+    end
+    outhtml = outhtml .. "</div>\n"
     return nil
   end,
   uploadFilesToWebspace = function()
+    return nil
+  end,
+  buildPrefsWindow = function()
+    local prefsframe = loveframes.Create("frame")
+    prefsframe:SetName("Preferences")
+    prefsframe:SetPos(0, 0)
+    prefsframe:SetSize(800, 600)
+    prefsframe:SetDraggable(false)
+    prefsframe:ShowCloseButton(true)
+    local colorcheck = loveframes.Create("checkbox", prefsframe)
+    colorcheck:SetPos(50, 50)
+    colorcheck:SetText("Colorblind Mode")
+    local deftabinput = loveframes.Create("textinput", prefsframe)
+    deftabinput:SetPos(50, 100)
+    deftabinput:SetWidth(200)
+    deftabinput:SetText(PREFS.DEFAULT_TAB)
+    local deftabtext = loveframes.Create("text", prefsframe)
+    deftabtext:SetPos(255, 100)
+    deftabtext:SetText("Default Metrics Tab")
+    local htmlfileinput = loveframes.Create("textinput", prefsframe)
+    htmlfileinput:SetPos(50, 130)
+    htmlfileinput:SetWidth(200)
+    htmlfileinput:SetText(PREFS.HTML_OUTPUT_FILE)
+    local htmlfiletext = loveframes.Create("text", prefsframe)
+    htmlfiletext:SetPos(255, 130)
+    htmlfiletext:SetText("HTML Output File")
+    local ftphostinput = loveframes.Create("textinput", prefsframe)
+    ftphostinput:SetPos(50, 160)
+    ftphostinput:SetWidth(200)
+    ftphostinput:SetText(PREFS.FTP_HOST)
+    local ftphosttext = loveframes.Create("text", prefsframe)
+    ftphosttext:SetPos(255, 160)
+    ftphosttext:SetText("FTP Host")
+    local ftpuserinput = loveframes.Create("textinput", prefsframe)
+    ftpuserinput:SetPos(50, 190)
+    ftpuserinput:SetWidth(200)
+    ftpuserinput:SetText(PREFS.FTP_USER)
+    local ftpusertext = loveframes.Create("text", prefsframe)
+    ftpusertext:SetPos(255, 190)
+    ftpusertext:SetText("FTP User")
+    local ftppassinput = loveframes.Create("textinput", prefsframe)
+    ftppassinput:SetPos(50, 220)
+    ftppassinput:SetWidth(200)
+    ftppassinput:SetMaskChar("*")
+    ftppassinput:SetText(PREFS.FTP_PASS)
+    local ftppasstext = loveframes.Create("text", prefsframe)
+    ftppasstext:SetPos(255, 220)
+    ftppasstext:SetText("FTP Password")
+    local ftppathinput = loveframes.Create("textinput", prefsframe)
+    ftppathinput:SetPos(50, 250)
+    ftppathinput:SetWidth(200)
+    ftppathinput:SetText(PREFS.FTP_PATH)
+    local ftppathtext = loveframes.Create("text", prefsframe)
+    ftppathtext:SetPos(255, 250)
+    ftppathtext:SetText("FTP Path")
+    local ftpcommandinput = loveframes.Create("textinput", prefsframe)
+    ftpcommandinput:SetPos(50, 280)
+    ftpcommandinput:SetWidth(200)
+    ftpcommandinput:SetText(PREFS.FTP_COMMAND)
+    local ftpcommandtext = loveframes.Create("text", prefsframe)
+    ftpcommandtext:SetPos(255, 280)
+    ftpcommandtext:SetText("FTP Command")
+    local entrycolsinput = loveframes.Create("textinput", prefsframe)
+    entrycolsinput:SetPos(50, 310)
+    entrycolsinput:SetWidth(200)
+    entrycolsinput:SetText(PREFS.ENTRIES_COLUMNS)
+    local entrycolstext = loveframes.Create("text", prefsframe)
+    entrycolstext:SetPos(255, 310)
+    entrycolstext:SetText("Entries-Panel Columns")
+    local entrylimitinput = loveframes.Create("textinput", prefsframe)
+    entrylimitinput:SetPos(50, 340)
+    entrylimitinput:SetWidth(200)
+    entrylimitinput:SetText(PREFS.ENTRIES_LIMIT)
+    local entrylimittext = loveframes.Create("text", prefsframe)
+    entrylimittext:SetPos(255, 340)
+    entrylimittext:SetText("Max Entries-Panel Items")
+    local applybutton = loveframes.Create("button", prefsframe)
+    applybutton:SetPos(490, 495)
+    applybutton:SetSize(150, 100)
+    applybutton:SetText("Apply")
+    applybutton.OnClick = function(object)
+      local cblnd = colorcheck:GetChecked()
+      local dtab = deftabinput:GetText()
+      local hfile = htmlfileinput:GetText()
+      local ecols = entrycolsinput:GetText()
+      local elim = entrylimitinput:GetText()
+      local fhost = ftphostinput:GetText()
+      local fuser = ftpuserinput:GetText()
+      local fpass = ftppassinput:GetText()
+      local fpath = ftppathinput:GetText()
+      local fcomm = ftpcommandinput:GetText()
+      dtab = (string.match(dtab, '%d+') and dtab) or 1
+      dtab = tonumber(dtab)
+      dtab = math.min(dtab, #PREFS.STATS_PERIODS)
+      if hfile:sub(-5) ~= ".html" then
+        hfile = hfile .. ".html"
+      end
+      ecols = (string.match(ecols, '%d+') and ecols) or 30
+      ecols = tonumber(ecols)
+      ecols = math.min(ecols, 50)
+      elim = (string.match(elim, '%d+') and elim) or 500
+      elim = tonumber(elim)
+      elim = math.min(elim, 1000)
+      PREFS.COLORBLIND_MODE = cblnd
+      PREFS.DEFAULT_TAB = dtab
+      PREFS.HTML_OUTPUT_FILE = hfile
+      PREFS.ENTRIES_COLUMNS = ecols
+      PREFS.ENTRIES_LIMIT = elim
+      PREFS.FTP_HOST = fhost
+      PREFS.FTP_USER = fuser
+      PREFS.FTP_PASS = fpass
+      PREFS.FTP_PATH = fpath
+      PREFS.FTP_COMMAND = fcomm
+      savePrefs()
+      prefsframe:Remove()
+      clearDynamicGUI()
+      updateDataAndGUI()
+      return nil
+    end
+    local closebutton = loveframes.Create("button", prefsframe)
+    closebutton:SetPos(645, 495)
+    closebutton:SetSize(150, 100)
+    closebutton:SetText("Close")
+    closebutton.OnClick = function(object)
+      prefsframe:Remove()
+      return nil
+    end
     return nil
   end,
   buildInputFrame = function()
@@ -228,7 +448,7 @@ return {
     inputframe:SetDraggable(false)
     inputframe:ShowCloseButton(false)
     local uinput = { }
-    for k, v in pairs(INPUT_NAMES) do
+    for k, v in pairs(PREFS.INPUT_NAMES) do
       uinput[k] = loveframes.Create("textinput", inputframe)
       uinput[k]:SetPos(5, (30 * k))
       uinput[k]:SetWidth(190)
@@ -236,7 +456,7 @@ return {
       uinput[k]:SetText(v)
       uinput[k]:SetTabReplacement("")
       uinput[k].OnFocusGained = function(object)
-        for kk, vv in pairs(INPUT_NAMES) do
+        for kk, vv in pairs(PREFS.INPUT_NAMES) do
           if #tostring(uinput[kk]:GetText()) == 0 then
             uinput[kk]:SetText(vv)
           end
@@ -251,7 +471,7 @@ return {
         return nil
       end
       uinput[k].OnEnter = function(object)
-        for kk, vv in pairs(INPUT_NAMES) do
+        for kk, vv in pairs(PREFS.INPUT_NAMES) do
           IN_TASK[kk] = object:GetText()
           object:SetText(vv)
         end
@@ -263,11 +483,10 @@ return {
     end
     local submitbutton = loveframes.Create("button", inputframe)
     submitbutton:SetPos(10, 120)
-    submitbutton:SetWidth(180)
-    submitbutton:SetHeight(60)
+    submitbutton:SetSize(180, 60)
     submitbutton:SetText("Submit")
     submitbutton.OnClick = function(object)
-      for k, v in pairs(INPUT_NAMES) do
+      for k, v in pairs(PREFS.INPUT_NAMES) do
         IN_TASK[k] = uinput[k]:GetText()
         uinput[k]:SetText(v)
       end
@@ -278,8 +497,7 @@ return {
     end
     local removebutton = loveframes.Create("button", inputframe)
     removebutton:SetPos(10, 185)
-    removebutton:SetWidth(180)
-    removebutton:SetHeight(20)
+    removebutton:SetSize(180, 20)
     removebutton:SetText("Delete Latest Entry")
     removebutton.OnClick = function(object)
       removeLatestTask()
@@ -289,11 +507,10 @@ return {
     end
     local publishbutton = loveframes.Create("button", inputframe)
     publishbutton:SetPos(10, 215)
-    publishbutton:SetWidth(180)
-    publishbutton:SetHeight(20)
+    publishbutton:SetSize(180, 20)
     publishbutton:SetText("Publish To HTML")
     publishbutton.OnClick = function(object)
-      for k, v in pairs(INPUT_NAMES) do
+      for k, v in pairs(PREFS.INPUT_NAMES) do
         IN_TASK[k] = uinput[k]:GetText()
         uinput[k]:SetText(v)
       end
@@ -302,8 +519,7 @@ return {
     end
     local uploadbutton = loveframes.Create("button", inputframe)
     uploadbutton:SetPos(10, 240)
-    uploadbutton:SetWidth(180)
-    uploadbutton:SetHeight(20)
+    uploadbutton:SetSize(180, 20)
     uploadbutton:SetText("FTP To Web")
     uploadbutton.OnClick = function(object)
       uploadFilesToWebspace()
@@ -311,10 +527,10 @@ return {
     end
     local prefsbutton = loveframes.Create("button", inputframe)
     prefsbutton:SetPos(100, 270)
-    prefsbutton:SetWidth(90)
-    prefsbutton:SetHeight(20)
+    prefsbutton:SetSize(90, 20)
     prefsbutton:SetText("Preferences")
     prefsbutton.OnClick = function(object)
+      buildPrefsWindow()
       return nil
     end
     return nil
@@ -333,37 +549,37 @@ return {
     metricstabs:SetPos(5, 30)
     metricstabs:SetSize(590, 265)
     metricstabs:SetPadding(0)
-    local panels = { }
-    for k, p in ipairs(STATS_PERIODS) do
-      panels[k] = loveframes.Create("panel", metricstabs)
-      panels[k].Draw = function(object)
+    local tabimage = "tabimage.png"
+    for k, p in pairs(PREFS.STATS_PERIODS) do
+      local panel = loveframes.Create("panel", metricstabs)
+      panel.Draw = function(object)
         love.graphics.setColor(30, 30, 30, 255)
         love.graphics.rectangle("fill", object:GetX(), object:GetY(), object:GetWidth(), object:GetHeight())
         return nil
       end
-      buildMetricsGrid(eradata[p], p, date, panels[k])
+      buildMetricsGrid(eradata[p], p, date, panel)
       local stext = "Hours Worked: \n " .. scoredata[p].hours .. " : " .. round(scoredata[p].avghours, 2) .. "/day"
       stext = stext .. (" \n  \n Hour Scores: \n " .. scoredata[p].hourmean .. ", " .. scoredata[p].houradj)
       stext = stext .. (" \n  \n Entry Scores: \n " .. scoredata[p].entrymean .. ", " .. scoredata[p].entryadj)
       stext = stext .. (" \n  \n Grade: " .. scoredata[p].grade)
-      local scoretext = loveframes.Create("text", panels[k])
+      local scoretext = loveframes.Create("text", panel)
       scoretext:SetPos(360, 5)
       scoretext:SetSize(230, 260)
-      scoretext:SetFont(smallironfont)
+      scoretext:SetFont(SMALL_IRON_FONT)
       scoretext:SetIgnoreNewlines(false)
       scoretext:SetText(stext)
-      metricstabs:AddTab((p .. "-DAY"), panels[k], _, _)
+      metricstabs:AddTab((p .. "-DAY"), panel, (p .. "-DAY"), tabimage)
     end
-    metricstabs:SwitchToTab(DEFAULT_TAB)
+    metricstabs:SwitchToTab(PREFS.DEFAULT_TAB)
     return nil
   end,
   buildMetricsGrid = function(pdata, period, date, frame)
     local grid = loveframes.Create("grid", frame)
     grid:SetPos(0, 0)
     grid:SetColumns(period)
-    grid:SetRows(#BAR_THRESHOLDS)
+    grid:SetRows(#PREFS.BAR_THRESHOLDS)
     grid:SetCellWidth(350 / period)
-    grid:SetCellHeight(240 / #BAR_THRESHOLDS)
+    grid:SetCellHeight(240 / #PREFS.BAR_THRESHOLDS)
     grid:SetCellPadding(0)
     grid:SetItemAutoSize(true)
     local emptyhex = {
@@ -375,9 +591,9 @@ return {
     local imonth = tonumber(date.month)
     local iday = tonumber(date.day)
     for p = 1, period do
-      for y, thresh in pairs(BAR_THRESHOLDS) do
+      for y, thresh in pairs(PREFS.BAR_THRESHOLDS) do
         local fullhex, invhex = getDayColors(iyear, imonth, iday)
-        local hex = emptyhex
+        local hex = (PREFS.COLORBLIND_MODE and invhex) or emptyhex
         local exists = false
         if (pdata[iyear] ~= nil) and (pdata[iyear][imonth] ~= nil) and (pdata[iyear][imonth][iday] ~= nil) then
           exists = true
@@ -400,7 +616,7 @@ return {
         tip:SetPadding(10)
         tip:SetText({
           invhex,
-          MONTH_NAMES[imonth] .. " " .. iday .. DAY_SUFFIXES[iday],
+          PREFS.MONTH_NAMES[imonth] .. " " .. iday .. PREFS.DAY_SUFFIXES[iday],
           ", " .. iyear .. " ::: " .. ((exists and pdata[iyear][imonth][iday].hours) or "0") .. " hours worked"
         })
         tip.Draw = function(object)
@@ -423,20 +639,20 @@ return {
     entriesframe:ShowCloseButton(false)
     return nil
   end,
-  buildEntriesList = function(data, container)
+  buildEntriesList = function(container)
     local listscroll = loveframes.Create("list", container)
     listscroll:EnableHorizontalStacking(true)
     listscroll:SetPos(0, 35)
     listscroll:SetSize(800, 265)
-    local cols = ENTRIES_COLUMNS
+    local cols = PREFS.ENTRIES_COLUMNS
     local cwidth = container:GetWidth() / cols
     for k, v in pairs(data) do
-      if k > ENTRIES_LIMIT then
+      if k > PREFS.ENTRIES_LIMIT then
         break
       end
       local d = os.date('*t', v.time)
       local hex, invhex = getDayColors(d.year, d.month, d.day)
-      local fulldate = MONTH_NAMES[d.month] .. " " .. d.day .. DAY_SUFFIXES[d.day] .. ", " .. d.year
+      local fulldate = PREFS.MONTH_NAMES[d.month] .. " " .. d.day .. PREFS.DAY_SUFFIXES[d.day] .. ", " .. d.year
       local fulltime = string.rep("0", 2 - #tostring(d.hour)) .. d.hour .. ":" .. string.rep("0", 2 - #tostring(d.min)) .. d.min
       local task = v.task .. " on " .. v.project .. " for " .. v.hours .. " hours"
       local frame = loveframes.Create("frame", listscroll)
@@ -475,11 +691,11 @@ return {
   end,
   updateDataAndGUI = function()
     local date = os.date('*t')
-    local _, eradata, scoredata = generateMetrics(date)
+    local timedata, eradata, scoredata = generateMetrics(date)
     buildMetricsFrame()
     buildMetricsTabs(eradata, scoredata, date, metricsframe)
     buildEntriesFrame()
-    buildEntriesList(data, entriesframe)
+    buildEntriesList(entriesframe)
     return nil
   end
 }

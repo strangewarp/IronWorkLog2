@@ -3,32 +3,18 @@ return {
 	
 	COLORBLIND_MODE: false
 
-	MAX_ENTRY_HISTORY: 100
-
-	STATS_PERIODS: {
-		7
-		15
-		30
-	}
-
 	DEFAULT_TAB: 1
 
-	STYLESHEET_FILE: "style.css"
 	HTML_OUTPUT_FILE: "index.html"
 
-	UPLOAD_FILES: {
-		"data.lua"
-		"style.css"
-		"index.html"
-	}
+	FTP_HOST: "your-ftp-address"
+	FTP_USER: "your-ftp-username"
+	FTP_PASS: "your-ftp-password"
+	FTP_PATH: "/folder/"
+	FTP_COMMAND: "stor"
 
-	FTP_PREFS: {
-		HOST: "your-ftp-address"
-		USER: "your-ftp-username"
-		PASS: "your-ftp-password"
-		PATH: "/folder/"
-		COMMAND: "stor"
-	}
+	ENTRIES_COLUMNS: 30
+	ENTRIES_LIMIT: 500
 
 	GRADE_THRESHOLDS: {
 		{"A+", 5.7142}
@@ -46,6 +32,12 @@ return {
 		{"F", 0}
 	}
 
+	STATS_PERIODS: {
+		7
+		15
+		30
+	}
+
 	BAR_THRESHOLDS: {
 		10
 		9
@@ -58,10 +50,6 @@ return {
 		2
 		1
 	}
-
-	ENTRIES_COLUMNS: 30
-
-	ENTRIES_LIMIT: 500
 
 	INPUT_NAMES: {
 		"Task"
