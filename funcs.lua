@@ -73,31 +73,119 @@ return {
     return dtab
   end,
   getDayColors = function(dyear, dmonth, dday)
-    local rgb = dateToColor({
+    local drgb = dateToColor({
       dyear,
       dmonth,
       dday
     })
-    if PREFS.COLORBLIND_MODE then
-      local greyrgb = math.floor((rgb[1] + rgb[2] + rgb[3]) / 3)
-      for i = 1, 3 do
-        rgb[i] = greyrgb
-      end
-    end
-    local invrgb
+    local hsl = RGBtoHSL(drgb)
+    local invhsl
     do
       local _accum_0 = { }
       local _len_0 = 1
       for i = 1, 3 do
-        _accum_0[_len_0] = (rgb[i] + 127) % 256
+        _accum_0[_len_0] = (hsl[i] + 127) % 256
         _len_0 = _len_0 + 1
       end
-      invrgb = _accum_0
+      invhsl = _accum_0
     end
+    if PREFS.COLORBLIND_MODE then
+      hsl[2] = 0
+      invhsl[2] = 0
+    end
+    hsl[4] = 255
+    invhsl[4] = 255
+    local rgb = HSLtoRGB(hsl)
+    local invrgb = HSLtoRGB(invhsl)
     return rgb, invrgb
   end,
-  rgbToHex = function(rgb)
+  RGBtoHSL = function(rgb)
+    local r, g, b, a = rgb[1], rgb[2], rgb[3], (rgb[4] or 255)
+    local h, s, l = 0, 0, 0
+    r = r / 255
+    g = g / 255
+    b = b / 255
+    local vmin = math.min(r, g, b)
+    local vmax = math.max(r, g, b)
+    local delmax = vmax - vmin
+    l = (vmax + vmin) / 2
+    if delmax ~= 0 then
+      if l < 0.5 then
+        s = delmax / (vmax + vmin)
+      else
+        s = delmax / (2 - vmax - vmin)
+      end
+      local delr = (((vmax - r) / 6) + (delmax / 2)) / delmax
+      local delg = (((vmax - g) / 6) + (delmax / 2)) / delmax
+      local delb = (((vmax - b) / 6) + (delmax / 2)) / delmax
+      if r == vmax then
+        h = delb - delg
+      elseif g == vmax then
+        h = (1 / 3) + delr - delb
+      elseif b == vmax then
+        h = (2 / 3) + delg - delr
+      end
+      if h < 0 then
+        h = h + 1
+      elseif h > 1 then
+        h = h - 1
+      end
+    end
+    h = round(h * 255, 0)
+    s = round(s * 255, 0)
+    l = round(l * 255, 0)
+    return {
+      h,
+      s,
+      l,
+      a
+    }
+  end,
+  HSLtoRGB = function(hsl)
+    local h, s, l, a = hsl[1], hsl[2], hsl[3], (hsl[4] or 255)
+    local r, g, b = 0, 0, 0
+    if s <= 0 then
+      return {
+        l,
+        l,
+        l,
+        a
+      }
+    end
+    h = (h / 256) * 6
+    s = s / 255
+    l = l / 255
+    local c = (1 - math.abs(2 * l - 1)) * s
+    local x = (1 - math.abs(h % 2 - 1)) * c
+    local m = (l - 0.5 * c)
+    if h < 1 then
+      r, g, b = c, x, 0
+    elseif h < 2 then
+      r, g, b = x, c, 0
+    elseif h < 3 then
+      r, g, b = 0, c, x
+    elseif h < 4 then
+      r, g, b = 0, x, c
+    elseif h < 5 then
+      r, g, b = x, 0, c
+    else
+      r, g, b = c, 0, x
+    end
+    r = (r + m) * 255
+    g = (g + m) * 255
+    b = (b + m) * 255
+    return {
+      r,
+      g,
+      b,
+      a
+    }
+  end,
+  RGBtoHEX = function(rgb)
     local outhex = ""
+    if rgb[4] then
+      table.remove(rgb, 4)
+    end
     for k, v in ipairs(rgb) do
       local h = ""
       while v > 0 do
@@ -277,7 +365,7 @@ return {
     local origdate = date.year .. "-" .. date.month .. "-" .. date.day
     local timedata, eradata, scoredata = generateMetrics(date)
     local dechex, decinvhex = getDayColors(tonumber(date.year), tonumber(date.month), tonumber(date.day))
-    local curhex, curinvhex = rgbToHex(dechex), rgbToHex(decinvhex)
+    local curhex, curinvhex = RGBtoHEX(dechex), RGBtoHEX(decinvhex)
     local outhtml = "<div id='holder'>\n"
     outhtml = outhtml .. "<div class='textheader'>\n"
     outhtml = outhtml .. "<p>\n"
@@ -322,15 +410,8 @@ return {
         cdate = os.date('*t', data[k + 1].time)
       end
       local nextdate = cdate.year .. "-" .. cdate.month .. "-" .. cdate.day
-      if k > PREFS.ENTRIES_LIMIT then
-        if newdate == lastdate then
-          outhtml = outhtml .. "</p>"
-          outhtml = outhtml .. "</div>\n"
-        end
-        break
-      end
       dechex, decinvhex = getDayColors(tonumber(edate.year), tonumber(edate.month), tonumber(edate.day))
-      local ehex, einvhex = rgbToHex(dechex), rgbToHex(decinvhex)
+      local ehex, einvhex = RGBtoHEX(dechex), RGBtoHEX(decinvhex)
       if (newdate ~= lastdate) or (newdate == origdate) then
         outhtml = outhtml .. ("<div class='unitrow' style='border-color:#" .. ehex .. ";'>")
         outhtml = outhtml .. "<p>"
@@ -338,9 +419,12 @@ return {
       end
       outhtml = outhtml .. "<br/>"
       outhtml = outhtml .. (v.task .. " on " .. v.project .. " ::: " .. v.hours .. " hours")
-      if nextdate ~= newdate then
+      if (nextdate ~= newdate) or (newdate == lastdate) or (k == PREFS.ENTRIES_LIMIT) or (k == #data) then
         outhtml = outhtml .. "</p>"
         outhtml = outhtml .. "</div>\n"
+      end
+      if k == PREFS.ENTRIES_LIMIT then
+        break
       end
       lastdate = newdate
     end
@@ -654,23 +738,40 @@ return {
     grid:SetCellHeight(240 / #PREFS.BAR_THRESHOLDS)
     grid:SetCellPadding(0)
     grid:SetItemAutoSize(true)
-    local emptyhex = {
-      60,
-      60,
-      60
-    }
     local iyear = tonumber(date.year)
     local imonth = tonumber(date.month)
     local iday = tonumber(date.day)
     for p = 1, period do
       for y, thresh in pairs(PREFS.BAR_THRESHOLDS) do
         local fullhex, invhex = getDayColors(iyear, imonth, iday)
-        local hex = (PREFS.COLORBLIND_MODE and invhex) or emptyhex
+        local hex = {
+          60,
+          60,
+          60,
+          255
+        }
+        invhex = (PREFS.COLORBLIND_MODE and {
+          220,
+          220,
+          220,
+          255
+        }) or invhex
         local exists = false
         if (pdata[iyear] ~= nil) and (pdata[iyear][imonth] ~= nil) and (pdata[iyear][imonth][iday] ~= nil) then
           exists = true
           if pdata[iyear][imonth][iday].hours >= thresh then
-            hex = fullhex
+            hex = (PREFS.COLORBLIND_MODE and {
+              160,
+              160,
+              160,
+              255
+            }) or fullhex
+            invhex = (PREFS.COLORBLIND_MODE and {
+              20,
+              20,
+              20,
+              255
+            }) or invhex
           end
         end
         local f = loveframes.Create("frame")
@@ -679,7 +780,7 @@ return {
         f:SetDraggable(false)
         f:ShowCloseButton(false)
         f.Draw = function(object)
-          love.graphics.setColor(hex[1], hex[2], hex[3], 255)
+          love.graphics.setColor(unpack(hex))
           love.graphics.rectangle("fill", object:GetX(), object:GetY(), object:GetWidth(), object:GetHeight())
           return nil
         end
@@ -687,12 +788,13 @@ return {
         tip:SetObject(f)
         tip:SetPadding(10)
         tip:SetText({
-          invhex,
-          PREFS.MONTH_NAMES[imonth] .. " " .. iday .. PREFS.DAY_SUFFIXES[iday],
-          ", " .. iyear .. " ::: " .. ((exists and pdata[iyear][imonth][iday].hours) or "0") .. " hours worked"
+          {
+            color = invhex
+          },
+          PREFS.MONTH_NAMES[imonth] .. " " .. iday .. PREFS.DAY_SUFFIXES[iday] .. ", " .. iyear .. " ::: " .. ((exists and pdata[iyear][imonth][iday].hours) or "0") .. " hours worked"
         })
         tip.Draw = function(object)
-          love.graphics.setColor(hex[1], hex[2], hex[3], 255)
+          love.graphics.setColor(unpack(hex))
           love.graphics.rectangle("fill", object:GetX(), object:GetY(), object:GetWidth(), object:GetHeight())
           return nil
         end
@@ -723,7 +825,7 @@ return {
         break
       end
       local d = os.date('*t', v.time)
-      local hex, invhex = getDayColors(d.year, d.month, d.day)
+      local hex, invhex = getDayColors(tonumber(d.year), tonumber(d.month), tonumber(d.day))
       local fulldate = PREFS.MONTH_NAMES[d.month] .. " " .. d.day .. PREFS.DAY_SUFFIXES[d.day] .. ", " .. d.year
       local fulltime = string.rep("0", 2 - #tostring(d.hour)) .. d.hour .. ":" .. string.rep("0", 2 - #tostring(d.min)) .. d.min
       local task = v.task .. " on " .. v.project .. " for " .. v.hours .. " hours"
@@ -733,7 +835,7 @@ return {
       frame:SetDraggable(false)
       frame:ShowCloseButton(false)
       frame.Draw = function(object)
-        love.graphics.setColor(hex[1], hex[2], hex[3], 255)
+        love.graphics.setColor(unpack(hex))
         love.graphics.rectangle("fill", object:GetX(), object:GetY(), object:GetWidth(), object:GetHeight())
         return nil
       end
@@ -744,7 +846,9 @@ return {
       tip:SetY(container:GetY())
       tip:SetPadding(10)
       tip:SetText({
-        invhex,
+        {
+          color = invhex
+        },
         fulldate .. " :: " .. fulltime .. " :: " .. task
       })
       tip.Draw = function(object)

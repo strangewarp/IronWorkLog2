@@ -63,18 +63,96 @@ return {
 	-- Get two complementary colors based on the current date
 	getDayColors: (dyear, dmonth, dday using PREFS) ->
 
-		rgb = dateToColor {dyear, dmonth, dday}
+		drgb = dateToColor {dyear, dmonth, dday}
+		hsl = RGBtoHSL drgb
+		--hsl = dateToColor {dyear, dmonth, dday}
+		invhsl = [(hsl[i] + 127) % 256 for i = 1, 3]
+
 		if PREFS.COLORBLIND_MODE
-			greyrgb = math.floor((rgb[1] + rgb[2] + rgb[3]) / 3)
-			rgb[i] = greyrgb for i = 1, 3
-		invrgb = [(rgb[i] + 127) % 256 for i = 1, 3]
+			hsl[2] = 0
+			invhsl[2] = 0
+
+		hsl[4] = 255
+		invhsl[4] = 255
+
+		rgb = HSLtoRGB hsl
+		invrgb = HSLtoRGB invhsl
 
 		rgb, invrgb
 
+	-- Converts RGB to HSL
+	RGBtoHSL: (rgb using nil) ->
+
+		r, g, b, a = rgb[1], rgb[2], rgb[3], (rgb[4] or 255)
+		h, s, l = 0, 0, 0
+
+		r /= 255
+		g /= 255
+		b /= 255
+
+		vmin = math.min(r, g, b)
+		vmax = math.max(r, g, b)
+		delmax = vmax - vmin
+
+		l = (vmax + vmin) / 2
+
+		if delmax ~= 0
+
+			if l < 0.5 then s = delmax / (vmax + vmin)
+			else s = delmax / (2 - vmax - vmin)
+
+			delr = (((vmax - r) / 6) + (delmax / 2)) / delmax
+			delg = (((vmax - g) / 6) + (delmax / 2)) / delmax
+			delb = (((vmax - b) / 6) + (delmax / 2)) / delmax
+
+			if r == vmax then h = delb - delg
+			elseif g == vmax then h = (1 / 3) + delr - delb
+			elseif b == vmax then h = (2 / 3) + delg - delr
+
+			if h < 0 then h += 1
+			elseif h > 1 then h -= 1
+
+		h = round(h * 255, 0)
+		s = round(s * 255, 0)
+		l = round(l * 255, 0)
+
+		{h, s, l, a}
+
+	-- Converts HSL to RGB
+	HSLtoRGB: (hsl using nil) ->
+
+		h, s, l, a = hsl[1], hsl[2], hsl[3], (hsl[4] or 255)
+		r, g, b = 0, 0, 0
+
+		if s <= 0 then return {l, l, l, a}
+
+		h = (h / 256) * 6
+		s /= 255
+		l /= 255
+
+		c = (1 - math.abs(2 * l - 1)) * s
+		x = (1 - math.abs(h % 2 - 1)) * c
+		m = (l - 0.5 * c)
+
+		if h < 1 then r, g, b = c, x, 0
+		elseif h < 2 then r, g, b = x, c, 0
+		elseif h < 3 then r, g, b = 0, c, x
+		elseif h < 4 then r, g, b = 0, x, c
+		elseif h < 5 then r, g, b = x, 0, c
+		else r, g, b = c, 0, x
+
+		r = (r + m) * 255
+		g = (g + m) * 255
+		b = (b + m) * 255
+
+		{r, g, b, a}
+
 	-- Convert a table of R, G, B values (0-255) into a HEX color-code
-	rgbToHex: (rgb using nil) ->
+	RGBtoHEX: (rgb using nil) ->
 
 		outhex = ""
+
+		if rgb[4] then table.remove rgb, 4
 
 		for k, v in ipairs rgb
 			h = ""
@@ -277,7 +355,7 @@ return {
 		timedata, eradata, scoredata = generateMetrics date
 
 		dechex, decinvhex = getDayColors tonumber(date.year), tonumber(date.month), tonumber(date.day)
-		curhex, curinvhex = rgbToHex(dechex), rgbToHex(decinvhex)
+		curhex, curinvhex = RGBtoHEX(dechex), RGBtoHEX(decinvhex)
 
 		outhtml = "<div id='holder'>\n"
 
@@ -337,24 +415,23 @@ return {
 				cdate = os.date '*t', data[k + 1].time
 			nextdate = cdate.year .. "-" .. cdate.month .. "-" .. cdate.day
 
-			if k > PREFS.ENTRIES_LIMIT
-				if newdate == lastdate
-					outhtml ..= "</p>"
-					outhtml ..= "</div>\n"
-				break
-
 			dechex, decinvhex = getDayColors tonumber(edate.year), tonumber(edate.month), tonumber(edate.day)
-			ehex, einvhex = rgbToHex(dechex), rgbToHex(decinvhex)
+			ehex, einvhex = RGBtoHEX(dechex), RGBtoHEX(decinvhex)
 			
 			if (newdate ~= lastdate) or (newdate == origdate)
 				outhtml ..= "<div class='unitrow' style='border-color:#" .. ehex .. ";'>"
 				outhtml ..= "<p>"
 				outhtml ..= PREFS.MONTH_NAMES[tonumber edate.month] .. " " .. edate.day .. PREFS.DAY_SUFFIXES[tonumber edate.day] .. ", " .. edate.year
+
 			outhtml ..= "<br/>"
 			outhtml ..= v.task .. " on " .. v.project .. " ::: " .. v.hours .. " hours"
-			if nextdate ~= newdate
+
+			if (nextdate ~= newdate) or (newdate == lastdate) or (k == PREFS.ENTRIES_LIMIT) or (k == #data)
 				outhtml ..= "</p>"
 				outhtml ..= "</div>\n"
+
+			if k == PREFS.ENTRIES_LIMIT
+				break
 
 			lastdate = newdate
 
@@ -726,8 +803,6 @@ return {
 		grid\SetCellPadding 0
 		grid\SetItemAutoSize true
 
-		emptyhex = {60, 60, 60}
-
 		iyear = tonumber date.year
 		imonth = tonumber date.month
 		iday = tonumber date.day
@@ -738,12 +813,14 @@ return {
 			for y, thresh in pairs PREFS.BAR_THRESHOLDS
 
 				fullhex, invhex = getDayColors iyear, imonth, iday
-				hex = (PREFS.COLORBLIND_MODE and invhex) or emptyhex
+				hex = {60, 60, 60, 255}
+				invhex = (PREFS.COLORBLIND_MODE and {220, 220, 220, 255}) or invhex
 				exists = false
 				if (pdata[iyear] ~= nil) and (pdata[iyear][imonth] ~= nil) and (pdata[iyear][imonth][iday] ~= nil)
 					exists = true
 					if pdata[iyear][imonth][iday].hours >= thresh
-						hex = fullhex
+						hex = (PREFS.COLORBLIND_MODE and {160, 160, 160, 255}) or fullhex
+						invhex = (PREFS.COLORBLIND_MODE and {20, 20, 20, 255}) or invhex
 
 				f = loveframes.Create "frame"
 				f\SetName ""
@@ -751,16 +828,19 @@ return {
 				f\SetDraggable false
 				f\ShowCloseButton false
 				f.Draw = (object using nil) ->
-					love.graphics.setColor(hex[1], hex[2], hex[3], 255)
+					love.graphics.setColor(unpack hex)
 					love.graphics.rectangle("fill", object\GetX!, object\GetY!, object\GetWidth!, object\GetHeight!)
 					nil
 
 				tip = loveframes.Create "tooltip"
 				tip\SetObject f
 				tip\SetPadding 10
-				tip\SetText {invhex, PREFS.MONTH_NAMES[imonth] .. " " .. iday .. PREFS.DAY_SUFFIXES[iday], ", " .. iyear .. " ::: " .. ((exists and pdata[iyear][imonth][iday].hours) or "0") .. " hours worked"}
+				tip\SetText {
+					{color: invhex},
+					PREFS.MONTH_NAMES[imonth] .. " " .. iday .. PREFS.DAY_SUFFIXES[iday] .. ", " .. iyear .. " ::: " .. ((exists and pdata[iyear][imonth][iday].hours) or "0") .. " hours worked"
+				}
 				tip.Draw = (object using nil) ->
-					love.graphics.setColor(hex[1], hex[2], hex[3], 255)
+					love.graphics.setColor(unpack hex)
 					love.graphics.rectangle("fill", object\GetX!, object\GetY!, object\GetWidth!, object\GetHeight!)
 					nil
 
@@ -803,7 +883,7 @@ return {
 			d = os.date('*t', v.time)
 
 			-- Translate a given date into color values
-			hex, invhex = getDayColors d.year, d.month, d.day
+			hex, invhex = getDayColors tonumber(d.year), tonumber(d.month), tonumber(d.day)
 
 			-- Make task data human-readable for tooltips
 			fulldate = PREFS.MONTH_NAMES[d.month] .. " " .. d.day .. PREFS.DAY_SUFFIXES[d.day] .. ", " .. d.year
@@ -811,14 +891,13 @@ return {
 			task = v.task .. " on " .. v.project .. " for " .. v.hours .. " hours"
 
 			-- Create an entry's colorbox
-			--frame = loveframes.Create "frame", grid
 			frame = loveframes.Create "frame", listscroll
 			frame\SetName ""
 			frame\SetSize cwidth, cwidth
 			frame\SetDraggable false
 			frame\ShowCloseButton false
 			frame.Draw = (object using nil) ->
-				love.graphics.setColor(hex[1], hex[2], hex[3], 255)
+				love.graphics.setColor(unpack hex)
 				love.graphics.rectangle("fill", object\GetX!, object\GetY!, object\GetWidth!, object\GetHeight!)
 				nil
 
@@ -829,7 +908,10 @@ return {
 			tip\SetX container\GetX!
 			tip\SetY container\GetY!
 			tip\SetPadding 10
-			tip\SetText {invhex, fulldate .. " :: " .. fulltime .. " :: " .. task}
+			tip\SetText {
+				{color: invhex},
+				fulldate .. " :: " .. fulltime .. " :: " .. task
+			}
 			tip.Draw = (object using nil) ->
 				love.graphics.setColor(hex[1], hex[2], hex[3], 255)
 				love.graphics.rectangle("fill", object\GetX!, object\GetY!, object\GetWidth!, object\GetHeight!)
