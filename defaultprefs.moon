@@ -1,4 +1,3 @@
-
 return {
 	
 	COLORBLIND_MODE: false

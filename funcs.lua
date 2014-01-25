@@ -16,6 +16,20 @@ return {
     end
     return t2
   end,
+  buildTableStringEntry = function(k, v, tnum)
+    local o, putk = "", ""
+    if type(k) == "string" then
+      putk = "[\"" .. k .. "\"] = "
+    end
+    if type(v) == "table" then
+      o = o .. (string.rep("\t", tnum) .. putk .. "{\n")
+      o = o .. deepTableToString(v, tnum)
+      o = o .. (string.rep("\t", tnum) .. "},\n")
+    else
+      o = o .. (string.rep("\t", tnum) .. putk .. (((type(v) == "string") and ("\"" .. v .. "\"")) or tostring(v)) .. ",\n")
+    end
+    return o
+  end,
   deepTableToString = function(t, depth)
     if t == nil then
       t = { }
@@ -25,17 +39,13 @@ return {
     end
     local out = ""
     local dplus = depth + 1
-    for k, v in pairs(t) do
-      local putk = "[" .. k .. "]"
-      if type(k) == "string" then
-        putk = "[\"" .. k .. "\"]"
+    if t[1] then
+      for k, v in ipairs(t) do
+        out = out .. buildTableStringEntry(k, v, dplus)
       end
-      if type(v) == "table" then
-        out = out .. (string.rep("\t", dplus) .. putk .. " = {\n")
-        out = out .. deepTableToString(v, dplus)
-        out = out .. (string.rep("\t", dplus) .. "},\n")
-      else
-        out = out .. (string.rep("\t", dplus) .. putk .. " = " .. (((type(v) == "string") and ("\"" .. v .. "\"")) or tostring(v)) .. ",\n")
+    else
+      for k, v in pairs(t) do
+        out = out .. buildTableStringEntry(k, v, dplus)
       end
     end
     if depth == 0 then
@@ -57,35 +67,47 @@ return {
     return nil
   end,
   dateToColor = function(dtab)
-    local out = { }
-    for k, v in ipairs(dtab) do
-      out[k] = round(v * 21.25, 0) % 256
-    end
-    return out
+    dtab[1] = (((dtab[1] % 8) + 1) * 32) - 1
+    dtab[2] = round(dtab[2] * 21.25, 0)
+    dtab[3] = (((dtab[3] % 8) + 1) * 32) - 1
+    return dtab
   end,
   getDayColors = function(dyear, dmonth, dday)
-    local hex = dateToColor({
+    local rgb = dateToColor({
       dyear,
       dmonth,
       dday
     })
     if PREFS.COLORBLIND_MODE then
-      local greyhex = math.floor((hex[1] + hex[2] + hex[3]) / 3)
+      local greyrgb = math.floor((rgb[1] + rgb[2] + rgb[3]) / 3)
       for i = 1, 3 do
-        hex[i] = greyhex
+        rgb[i] = greyrgb
       end
     end
-    local invhex
+    local invrgb
     do
       local _accum_0 = { }
       local _len_0 = 1
       for i = 1, 3 do
-        _accum_0[_len_0] = (hex[i] + 127) % 256
+        _accum_0[_len_0] = (rgb[i] + 127) % 256
         _len_0 = _len_0 + 1
       end
-      invhex = _accum_0
+      invrgb = _accum_0
     end
-    return hex, invhex
+    return rgb, invrgb
+  end,
+  rgbToHex = function(rgb)
+    local outhex = ""
+    for k, v in ipairs(rgb) do
+      local h = ""
+      while v > 0 do
+        local digit = math.fmod(v, 16) + 1
+        v = math.floor(v / 16)
+        h = string.sub("0123456789ABCDEF", digit, digit) .. h
+      end
+      outhex = outhex .. h
+    end
+    return outhex
   end,
   dateCountBack = function(iyear, imonth, iday)
     iday = iday - 1
@@ -252,69 +274,108 @@ return {
   end,
   publishToHTML = function()
     local date = os.date('*t')
+    local origdate = date.year .. "-" .. date.month .. "-" .. date.day
     local timedata, eradata, scoredata = generateMetrics(date)
-    local curhex, curinvhex = getDayColors(tonumber(date.year), tonumber(date.month), tonumber(date.day))
-    local outhtml = outhtml .. "<div id='holder'>\n"
-    local scoretiles = {
-      "IRON",
-      "WORK",
-      "LOG",
-      "",
-      "Updated",
-      PREFS.MONTH_NAMES[tonumber(date.month)],
-      date.day .. PREFS.DAY_SUFFIXES[tonumber(date.day)] .. ",",
-      date.year,
-      "",
-      "",
-      "",
-      ""
-    }
+    local dechex, decinvhex = getDayColors(tonumber(date.year), tonumber(date.month), tonumber(date.day))
+    local curhex, curinvhex = rgbToHex(dechex), rgbToHex(decinvhex)
+    local outhtml = "<div id='holder'>\n"
+    outhtml = outhtml .. "<div class='textheader'>\n"
+    outhtml = outhtml .. "<p>\n"
+    outhtml = outhtml .. "IRON WORK LOG<br/>\n"
+    outhtml = outhtml .. ("Updated " .. PREFS.MONTH_NAMES[tonumber(date.month)] .. " " .. date.day .. PREFS.DAY_SUFFIXES[tonumber(date.day)] .. ", " .. date.year .. "<br/>\n")
+    outhtml = outhtml .. "<br/>\n"
+    outhtml = outhtml .. "</p>\n"
+    outhtml = outhtml .. "</div>\n"
+    local scoretiles = { }
     for k, v in pairs(PREFS.STATS_PERIODS) do
-      for i = 1, 3 do
-        table.insert(scoretiles, "")
-      end
-      table.insert(scoretiles, #scoretiles - 2, v .. "-DAY:")
-      table.insert(scoretiles, "Work Hours:")
-      table.insert(scoretiles, scoredata[v].hours)
+      table.insert(scoretiles, v .. "-DAY:")
+      table.insert(scoretiles, "&nbsp;")
       table.insert(scoretiles, "Tasks:")
       table.insert(scoretiles, scoredata[v].entries)
-      table.insert(scoretiles, "Hour Avg:")
-      table.insert(scoretiles, scoredata[v].hourmean)
-      table.insert(scoretiles, scoredata[v].houradj)
-      table.insert(scoretiles, "")
-      table.insert(scoretiles, "Entry Avg:")
-      table.insert(scoretiles, scoredata[v].entrymean)
-      table.insert(scoretiles, scoredata[v].entryadj)
-      table.insert(scoretiles, "")
+      table.insert(scoretiles, "Work Hours:")
+      table.insert(scoretiles, scoredata[v].hours)
+      table.insert(scoretiles, "Hours/Day:")
+      table.insert(scoretiles, round(scoredata[v].avghours, 2))
+      table.insert(scoretiles, "HourIronAvg:")
+      table.insert(scoretiles, scoredata[v].hourmean .. "; " .. scoredata[v].houradj)
+      table.insert(scoretiles, "EntryIronAvg:")
+      table.insert(scoretiles, scoredata[v].entrymean .. "; " .. scoredata[v].entryadj)
       table.insert(scoretiles, "Grade:")
       table.insert(scoretiles, scoredata[v].grade)
       for i = 1, 2 do
-        table.insert(scoretiles, "")
-      end
-      for i = 1, 4 do
-        table.insert(scoretiles, "------")
+        table.insert(scoretiles, "&nbsp;")
       end
     end
     for k, v in ipairs(scoretiles) do
-      outhtml = outhtml .. ("<div class='scorechunk' style='background-color:#" .. curhex .. ";border-color:#" .. curhex .. ";'>")
-      outhtml = outhtml .. ("<p style='color:#" .. curinvhex .. ";'>")
+      outhtml = outhtml .. "<div class='scorechunk'>"
+      outhtml = outhtml .. "<p>"
       outhtml = outhtml .. v
       outhtml = outhtml .. "</p>"
       outhtml = outhtml .. "</div>\n"
     end
+    local lastdate = origdate
     for k, v in pairs(data) do
+      local edate = os.date('*t', v.time)
+      local newdate = edate.year .. "-" .. edate.month .. "-" .. edate.day
+      local cdate = edate
+      if data[k + 1] ~= nil then
+        cdate = os.date('*t', data[k + 1].time)
+      end
+      local nextdate = cdate.year .. "-" .. cdate.month .. "-" .. cdate.day
       if k > PREFS.ENTRIES_LIMIT then
+        if newdate == lastdate then
+          outhtml = outhtml .. "</p>"
+          outhtml = outhtml .. "</div>\n"
+        end
         break
       end
+      dechex, decinvhex = getDayColors(tonumber(edate.year), tonumber(edate.month), tonumber(edate.day))
+      local ehex, einvhex = rgbToHex(dechex), rgbToHex(decinvhex)
+      if (newdate ~= lastdate) or (newdate == origdate) then
+        outhtml = outhtml .. ("<div class='unitrow' style='border-color:#" .. ehex .. ";'>")
+        outhtml = outhtml .. "<p>"
+        outhtml = outhtml .. (PREFS.MONTH_NAMES[tonumber(edate.month)] .. " " .. edate.day .. PREFS.DAY_SUFFIXES[tonumber(edate.day)] .. ", " .. edate.year)
+      end
+      outhtml = outhtml .. "<br/>"
+      outhtml = outhtml .. (v.task .. " on " .. v.project .. " ::: " .. v.hours .. " hours")
+      if nextdate ~= newdate then
+        outhtml = outhtml .. "</p>"
+        outhtml = outhtml .. "</div>\n"
+      end
+      lastdate = newdate
     end
     outhtml = outhtml .. "</div>\n"
+    local splitleft, splitright = HTML_TEMPLATE:find("IronWorkLogContents")
+    local outfull = HTML_TEMPLATE:sub(1, splitleft - 1) .. outhtml .. HTML_TEMPLATE:sub(splitright + 1)
+    local f = love.filesystem.newFile("index.html")
+    f:open("w")
+    f:write(outfull)
+    f:close()
     return nil
   end,
   uploadFilesToWebspace = function()
+    local files = {
+      "style.css",
+      "index.html",
+      "data.lua"
+    }
+    for k, v in pairs(files) do
+      if love.filesystem.exists(v) then
+        local fstring, fsize = love.filesystem.read(v)
+        local f, e = ftp.put({
+          host = PREFS.FTP_HOST,
+          user = PREFS.FTP_USER,
+          password = PREFS.FTP_PASS,
+          command = PREFS.FTP_COMMAND,
+          argument = PREFS.FTP_PATH .. v,
+          source = ltn12.source.string(fstring)
+        })
+      end
+    end
     return nil
   end,
   buildPrefsWindow = function()
-    local prefsframe = loveframes.Create("frame")
+    prefsframe = loveframes.Create("frame")
     prefsframe:SetName("Preferences")
     prefsframe:SetPos(0, 0)
     prefsframe:SetSize(800, 600)
@@ -323,6 +384,7 @@ return {
     local colorcheck = loveframes.Create("checkbox", prefsframe)
     colorcheck:SetPos(50, 50)
     colorcheck:SetText("Colorblind Mode")
+    colorcheck:SetChecked(PREFS.COLORBLIND_MODE)
     local deftabinput = loveframes.Create("textinput", prefsframe)
     deftabinput:SetPos(50, 100)
     deftabinput:SetWidth(200)
@@ -354,6 +416,7 @@ return {
     local ftppassinput = loveframes.Create("textinput", prefsframe)
     ftppassinput:SetPos(50, 220)
     ftppassinput:SetWidth(200)
+    ftppassinput:SetMasked(true)
     ftppassinput:SetMaskChar("*")
     ftppassinput:SetText(PREFS.FTP_PASS)
     local ftppasstext = loveframes.Create("text", prefsframe)
@@ -525,9 +588,18 @@ return {
       uploadFilesToWebspace()
       return nil
     end
+    local refreshbutton = loveframes.Create("button", inputframe)
+    refreshbutton:SetPos(10, 270)
+    refreshbutton:SetSize(85, 20)
+    refreshbutton:SetText("Refresh")
+    refreshbutton.OnClick = function(object)
+      clearDynamicGUI()
+      updateDataAndGUI()
+      return nil
+    end
     local prefsbutton = loveframes.Create("button", inputframe)
-    prefsbutton:SetPos(100, 270)
-    prefsbutton:SetSize(90, 20)
+    prefsbutton:SetPos(105, 270)
+    prefsbutton:SetSize(85, 20)
     prefsbutton:SetText("Preferences")
     prefsbutton.OnClick = function(object)
       buildPrefsWindow()

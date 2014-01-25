@@ -1,6 +1,6 @@
 return { HTMLDOC = [[
 <!DOCTYPE html>
-<html lang="en">
+<html>
 
 	<head>
 	
@@ -12,7 +12,7 @@ return { HTMLDOC = [[
 
 	<body>
 
-		!!?IronWorkLogContents?!!
+IronWorkLogContents
 
 	</body>
 

@@ -47,6 +47,8 @@ love.load = function()
   }
   buildInputFrame()
   updateDataAndGUI()
+  oldtime = love.timer.getTime()
+  olddate = os.date('*t')
   return nil
 end
 love.update = function(dt)

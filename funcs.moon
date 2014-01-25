@@ -9,22 +9,33 @@ return {
 				else t2[k] = v
 		t2
 
+	-- Continued from within deepTableToString, lay down table values into the string itself
+	buildTableStringEntry: (k, v, tnum using nil) ->
+		o, putk = "", ""
+
+		if type(k) == "string"
+			putk = "[\"" .. k .. "\"] = "
+		if type(v) == "table"
+			o ..= string.rep("\t", tnum) .. putk .. "{\n"
+			o ..= deepTableToString(v, tnum)
+			o ..= string.rep("\t", tnum) .. "},\n"
+		else
+			o ..= string.rep("\t", tnum) .. putk .. (((type(v) == "string") and ("\"" .. v .. "\"")) or tostring(v)) .. ",\n"
+
+		o
+
 	-- Convert an arbitrary table into the contents of a Lua table-file
 	deepTableToString: (t = {}, depth = 0 using nil) ->
 
 		out = ""
 		dplus = depth + 1
 
-		for k, v in pairs t
-			putk = "[" .. k .. "]"
-			if type(k) == "string"
-				putk = "[\"" .. k .. "\"]"
-			if type(v) == "table"
-				out ..= string.rep("\t", dplus) .. putk .. " = {\n"
-				out ..= deepTableToString(v, dplus)
-				out ..= string.rep("\t", dplus) .. "},\n"
-			else
-				out ..= string.rep("\t", dplus) .. putk .. " = " .. (((type(v) == "string") and ("\"" .. v .. "\"")) or tostring(v)) .. ",\n"
+		if t[1]
+			for k, v in ipairs t
+				out ..= buildTableStringEntry k, v, dplus
+		else
+			for k, v in pairs t
+				out ..= buildTableStringEntry k, v, dplus
 
 		if depth == 0
 			out = "return {\n\n" .. out .. "\n\n}\n"
@@ -42,23 +53,38 @@ return {
 		_G[k] = v for k, v in pairs tab
 		nil
 
-	-- Convert a date to a HEX value
+	-- Convert a date to an RGB value
 	dateToColor: (dtab using nil) ->
-		out = {}
-		for k, v in ipairs dtab
-			out[k] = round(v * 21.25, 0) % 256
-		out
+		dtab[1] = (((dtab[1] % 8) + 1) * 32) - 1 -- Year
+		dtab[2] = round(dtab[2] * 21.25, 0) -- Month
+		dtab[3] = (((dtab[3] % 8) + 1) * 32) - 1 -- Day
+		dtab
 
 	-- Get two complementary colors based on the current date
 	getDayColors: (dyear, dmonth, dday using PREFS) ->
 
-		hex = dateToColor {dyear, dmonth, dday}
+		rgb = dateToColor {dyear, dmonth, dday}
 		if PREFS.COLORBLIND_MODE
-			greyhex = math.floor((hex[1] + hex[2] + hex[3]) / 3)
-			hex[i] = greyhex for i = 1, 3
-		invhex = [(hex[i] + 127) % 256 for i = 1, 3]
+			greyrgb = math.floor((rgb[1] + rgb[2] + rgb[3]) / 3)
+			rgb[i] = greyrgb for i = 1, 3
+		invrgb = [(rgb[i] + 127) % 256 for i = 1, 3]
 
-		hex, invhex
+		rgb, invrgb
+
+	-- Convert a table of R, G, B values (0-255) into a HEX color-code
+	rgbToHex: (rgb using nil) ->
+
+		outhex = ""
+
+		for k, v in ipairs rgb
+			h = ""
+			while v > 0
+				digit = math.fmod(v, 16) + 1
+				v = math.floor(v / 16)
+				h = string.sub("0123456789ABCDEF", digit, digit) .. h
+			outhex ..= h
+
+		outhex
 
 	-- Count backwards by 1 day from an arbitrary date
 	dateCountBack: (iyear, imonth, iday using nil) ->
@@ -247,83 +273,128 @@ return {
 	publishToHTML: (using data, HTML_TEMPLATE, PREFS) ->
 		
 		date = os.date '*t'
-
+		origdate = date.year .. "-" .. date.month .. "-" .. date.day
 		timedata, eradata, scoredata = generateMetrics date
 
-		curhex, curinvhex = getDayColors tonumber(date.year), tonumber(date.month), tonumber(date.day)
+		dechex, decinvhex = getDayColors tonumber(date.year), tonumber(date.month), tonumber(date.day)
+		curhex, curinvhex = rgbToHex(dechex), rgbToHex(decinvhex)
 
-		outhtml ..= "<div id='holder'>\n"
+		outhtml = "<div id='holder'>\n"
 
-		scoretiles = {
-			"IRON", "WORK", "LOG", "",
-			"Updated",
-			PREFS.MONTH_NAMES[tonumber date.month],
-			date.day .. PREFS.DAY_SUFFIXES[tonumber date.day] .. ",",
-			date.year,
-			"", "", "", ""
-		}
+		outhtml ..= "<div class='textheader'>\n"
+		outhtml ..= "<p>\n"
+		outhtml ..= "IRON WORK LOG<br/>\n"
+		outhtml ..= "Updated " .. PREFS.MONTH_NAMES[tonumber date.month] .. " " .. date.day .. PREFS.DAY_SUFFIXES[tonumber date.day] .. ", " .. date.year .. "<br/>\n"
+		outhtml ..= "<br/>\n"
+		outhtml ..= "</p>\n"
+		outhtml ..= "</div>\n"
 
+		scoretiles = {}
+
+		-- Assemble HTML tiles for all periods' scores
 		for k, v in pairs PREFS.STATS_PERIODS
 
-			table.insert(scoretiles, "") for i = 1, 3
-			table.insert(scoretiles, #scoretiles - 2, v .. "-DAY:")
+			table.insert(scoretiles, v .. "-DAY:")
+			table.insert(scoretiles, "&nbsp;")
 
-			table.insert(scoretiles, "Work Hours:")
-			table.insert(scoretiles, scoredata[v].hours)
 			table.insert(scoretiles, "Tasks:")
 			table.insert(scoretiles, scoredata[v].entries)
 
-			table.insert(scoretiles, "Hour Avg:")
-			table.insert(scoretiles, scoredata[v].hourmean)
-			table.insert(scoretiles, scoredata[v].houradj)
-			table.insert(scoretiles, "")
+			table.insert(scoretiles, "Work Hours:")
+			table.insert(scoretiles, scoredata[v].hours)
 
-			table.insert(scoretiles, "Entry Avg:")
-			table.insert(scoretiles, scoredata[v].entrymean)
-			table.insert(scoretiles, scoredata[v].entryadj)
-			table.insert(scoretiles, "")
+			table.insert(scoretiles, "Hours/Day:")
+			table.insert(scoretiles, round(scoredata[v].avghours, 2))
+
+			table.insert(scoretiles, "HourIronAvg:")
+			table.insert(scoretiles, scoredata[v].hourmean .. "; " .. scoredata[v].houradj)
+
+			table.insert(scoretiles, "EntryIronAvg:")
+			table.insert(scoretiles, scoredata[v].entrymean .. "; " .. scoredata[v].entryadj)
 
 			table.insert(scoretiles, "Grade:")
 			table.insert(scoretiles, scoredata[v].grade)
-			table.insert(scoretiles, "") for i = 1, 2
 
-			table.insert(scoretiles, "------") for i = 1, 4
+			table.insert(scoretiles, "&nbsp;") for i = 1, 2
 
 		for k, v in ipairs scoretiles
 
-			outhtml ..= "<div class='scorechunk' style='background-color:#" .. curhex .. ";border-color:#" .. curhex .. ";'>"
-			outhtml ..= "<p style='color:#" .. curinvhex .. ";'>"
+			outhtml ..= "<div class='scorechunk'>"
+			outhtml ..= "<p>"
 			outhtml ..= v
 			outhtml ..= "</p>"
 			outhtml ..= "</div>\n"
 
-
-
+		-- Assemble HTML rows for all data entries, up to the limit for displayed entries
+		lastdate = origdate
 		for k, v in pairs data
 
+			edate = os.date '*t', v.time
+			newdate = edate.year .. "-" .. edate.month .. "-" .. edate.day
+
+			cdate = edate
+			if data[k + 1] ~= nil
+				cdate = os.date '*t', data[k + 1].time
+			nextdate = cdate.year .. "-" .. cdate.month .. "-" .. cdate.day
+
 			if k > PREFS.ENTRIES_LIMIT
+				if newdate == lastdate
+					outhtml ..= "</p>"
+					outhtml ..= "</div>\n"
 				break
 
+			dechex, decinvhex = getDayColors tonumber(edate.year), tonumber(edate.month), tonumber(edate.day)
+			ehex, einvhex = rgbToHex(dechex), rgbToHex(decinvhex)
+			
+			if (newdate ~= lastdate) or (newdate == origdate)
+				outhtml ..= "<div class='unitrow' style='border-color:#" .. ehex .. ";'>"
+				outhtml ..= "<p>"
+				outhtml ..= PREFS.MONTH_NAMES[tonumber edate.month] .. " " .. edate.day .. PREFS.DAY_SUFFIXES[tonumber edate.day] .. ", " .. edate.year
+			outhtml ..= "<br/>"
+			outhtml ..= v.task .. " on " .. v.project .. " ::: " .. v.hours .. " hours"
+			if nextdate ~= newdate
+				outhtml ..= "</p>"
+				outhtml ..= "</div>\n"
 
-
+			lastdate = newdate
 
 		outhtml ..= "</div>\n"
 
+		-- Find the insertion point in the HTML template, and replace the insertion marker with the HTML-formatted worklog data
+		splitleft, splitright = HTML_TEMPLATE\find "IronWorkLogContents"
+		outfull = HTML_TEMPLATE\sub(1, splitleft - 1) .. outhtml .. HTML_TEMPLATE\sub(splitright + 1)
 
+		-- Make the composite HTML page into a new file
+		f = love.filesystem.newFile "index.html"
+		f\open "w"
+		f\write outfull
+		f\close!
 
 		nil
 
-	-- TODO: FTP all current UPLOAD_FILES to the user's webspace
-	uploadFilesToWebspace: (using PREFS) ->
+	-- FTP style.css, index.html, and data.lua to the user's webspace
+	uploadFilesToWebspace: (using ftp, ltn12, PREFS) ->
 
+		files = {"style.css", "index.html", "data.lua"}
 
+		for k, v in pairs files
+			if love.filesystem.exists v
+				fstring, fsize = love.filesystem.read(v)
+				f, e = ftp.put {
+					host: PREFS.FTP_HOST
+					user: PREFS.FTP_USER
+					password: PREFS.FTP_PASS
+					command: PREFS.FTP_COMMAND
+					argument: PREFS.FTP_PATH .. v
+					source: ltn12.source.string(fstring)
+				}
 
 		nil
 
 	-- Build the pop-up prefs window
 	buildPrefsWindow: (using PREFS) ->
 
-		prefsframe = loveframes.Create "frame"
+		export prefsframe = loveframes.Create "frame"
 		prefsframe\SetName "Preferences"
 		prefsframe\SetPos 0, 0
 		prefsframe\SetSize 800, 600
@@ -333,6 +404,7 @@ return {
 		colorcheck = loveframes.Create "checkbox", prefsframe
 		colorcheck\SetPos 50, 50
 		colorcheck\SetText "Colorblind Mode"
+		colorcheck\SetChecked PREFS.COLORBLIND_MODE
 
 		deftabinput = loveframes.Create "textinput", prefsframe
 		deftabinput\SetPos 50, 100
@@ -373,6 +445,7 @@ return {
 		ftppassinput = loveframes.Create "textinput", prefsframe
 		ftppassinput\SetPos 50, 220
 		ftppassinput\SetWidth 200
+		ftppassinput\SetMasked true
 		ftppassinput\SetMaskChar "*"
 		ftppassinput\SetText PREFS.FTP_PASS
 
@@ -570,9 +643,19 @@ return {
 			uploadFilesToWebspace!
 			nil
 
+		refreshbutton = loveframes.Create "button", inputframe
+		refreshbutton\SetPos 10, 270
+		refreshbutton\SetSize 85, 20
+		refreshbutton\SetText "Refresh"
+
+		refreshbutton.OnClick = (object using nil) ->
+			clearDynamicGUI!
+			updateDataAndGUI!
+			nil
+
 		prefsbutton = loveframes.Create "button", inputframe
-		prefsbutton\SetPos 100, 270
-		prefsbutton\SetSize 90, 20
+		prefsbutton\SetPos 105, 270
+		prefsbutton\SetSize 85, 20
 		prefsbutton\SetText "Preferences"
 
 		prefsbutton.OnClick = (object using nil) ->

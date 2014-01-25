@@ -43,9 +43,12 @@ love.load = () ->
 
 	updateDataAndGUI!
 
+	export oldtime = love.timer.getTime!
+	export olddate = os.date '*t'
+
 	nil
 
-love.update = (dt using nil) ->
+love.update = (dt using oldtime) ->
 	loveframes.update(dt)
 	nil
 
