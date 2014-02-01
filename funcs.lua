@@ -412,14 +412,14 @@ return {
       local nextdate = cdate.year .. "-" .. cdate.month .. "-" .. cdate.day
       dechex, decinvhex = getDayColors(tonumber(edate.year), tonumber(edate.month), tonumber(edate.day))
       local ehex, einvhex = RGBtoHEX(dechex), RGBtoHEX(decinvhex)
-      if (newdate ~= lastdate) or (newdate == origdate) then
+      if (newdate ~= lastdate) or (k == 1) then
         outhtml = outhtml .. ("<div class='unitrow' style='border-color:#" .. ehex .. ";'>")
         outhtml = outhtml .. "<p>"
         outhtml = outhtml .. (PREFS.MONTH_NAMES[tonumber(edate.month)] .. " " .. edate.day .. PREFS.DAY_SUFFIXES[tonumber(edate.day)] .. ", " .. edate.year)
       end
       outhtml = outhtml .. "<br/>"
       outhtml = outhtml .. (v.task .. " on " .. v.project .. " ::: " .. v.hours .. " hours")
-      if (nextdate ~= newdate) or (newdate == lastdate) or (k == PREFS.ENTRIES_LIMIT) or (k == #data) then
+      if (nextdate ~= newdate) or (k == PREFS.ENTRIES_LIMIT) or (k == #data) then
         outhtml = outhtml .. "</p>"
         outhtml = outhtml .. "</div>\n"
       end

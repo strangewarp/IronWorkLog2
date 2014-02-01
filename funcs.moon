@@ -418,7 +418,7 @@ return {
 			dechex, decinvhex = getDayColors tonumber(edate.year), tonumber(edate.month), tonumber(edate.day)
 			ehex, einvhex = RGBtoHEX(dechex), RGBtoHEX(decinvhex)
 			
-			if (newdate ~= lastdate) or (newdate == origdate)
+			if (newdate ~= lastdate) or (k == 1)
 				outhtml ..= "<div class='unitrow' style='border-color:#" .. ehex .. ";'>"
 				outhtml ..= "<p>"
 				outhtml ..= PREFS.MONTH_NAMES[tonumber edate.month] .. " " .. edate.day .. PREFS.DAY_SUFFIXES[tonumber edate.day] .. ", " .. edate.year
@@ -426,7 +426,7 @@ return {
 			outhtml ..= "<br/>"
 			outhtml ..= v.task .. " on " .. v.project .. " ::: " .. v.hours .. " hours"
 
-			if (nextdate ~= newdate) or (newdate == lastdate) or (k == PREFS.ENTRIES_LIMIT) or (k == #data)
+			if (nextdate ~= newdate) or (k == PREFS.ENTRIES_LIMIT) or (k == #data)
 				outhtml ..= "</p>"
 				outhtml ..= "</div>\n"
 

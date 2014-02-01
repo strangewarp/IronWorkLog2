@@ -39,7 +39,7 @@ love.load = function()
     PREFS[k] = v
   end
   data = require("data")
-  SMALL_IRON_FONT = love.graphics.newImageFont("font.png", " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/():;%&`'*#=[]\"")
+  SMALL_IRON_FONT = love.graphics.newFont("mirai-seu.ttf", 23)
   IN_TASK = {
     "",
     "",

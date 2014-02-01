@@ -35,7 +35,8 @@ love.load = () ->
 
 	export data = require "data"
 
-	export SMALL_IRON_FONT = love.graphics.newImageFont "font.png", " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/():;%&`'*#=[]\""
+	--export SMALL_IRON_FONT = love.graphics.newImageFont "font.png", " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-+/():;%&`'*#=[]\""
+	export SMALL_IRON_FONT = love.graphics.newFont "mirai-seu.ttf", 23
 
 	export IN_TASK = {"", "", ""}
 
