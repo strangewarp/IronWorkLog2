@@ -28,6 +28,8 @@ love.load = () ->
 
 	export HTML_TEMPLATE, _ = love.filesystem.read "template.html"
 
+	export USER_FTP_PASSWORD = ""
+
 	-- Load user preferences, and then overwrite default prefs with user-defined prefs where applicable
 	userprefs = require "prefs"
 	for k, v in pairs userprefs

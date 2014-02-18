@@ -450,7 +450,7 @@ return {
 		nil
 
 	-- FTP style.css, index.html, and data.lua to the user's webspace
-	uploadFilesToWebspace: (using ftp, ltn12, PREFS) ->
+	uploadFilesToWebspace: (using ftp, ltn12, PREFS, USER_FTP_PASSWORD) ->
 
 		files = {"style.css", "index.html", "data.lua"}
 
@@ -460,7 +460,7 @@ return {
 				f, e = ftp.put {
 					host: PREFS.FTP_HOST
 					user: PREFS.FTP_USER
-					password: PREFS.FTP_PASS
+					password: tostring USER_FTP_PASSWORD
 					command: PREFS.FTP_COMMAND
 					argument: PREFS.FTP_PATH .. v
 					source: ltn12.source.string(fstring)
@@ -519,51 +519,40 @@ return {
 		ftpusertext\SetPos 255, 190
 		ftpusertext\SetText "FTP User"
 
-		ftppassinput = loveframes.Create "textinput", prefsframe
-		ftppassinput\SetPos 50, 220
-		ftppassinput\SetWidth 200
-		ftppassinput\SetMasked true
-		ftppassinput\SetMaskChar "*"
-		ftppassinput\SetText PREFS.FTP_PASS
-
-		ftppasstext = loveframes.Create "text", prefsframe
-		ftppasstext\SetPos 255, 220
-		ftppasstext\SetText "FTP Password"
-
 		ftppathinput = loveframes.Create "textinput", prefsframe
-		ftppathinput\SetPos 50, 250
+		ftppathinput\SetPos 50, 220
 		ftppathinput\SetWidth 200
 		ftppathinput\SetText PREFS.FTP_PATH
 
 		ftppathtext = loveframes.Create "text", prefsframe
-		ftppathtext\SetPos 255, 250
+		ftppathtext\SetPos 255, 220
 		ftppathtext\SetText "FTP Path"
 
 		ftpcommandinput = loveframes.Create "textinput", prefsframe
-		ftpcommandinput\SetPos 50, 280
+		ftpcommandinput\SetPos 50, 250
 		ftpcommandinput\SetWidth 200
 		ftpcommandinput\SetText PREFS.FTP_COMMAND
 
 		ftpcommandtext = loveframes.Create "text", prefsframe
-		ftpcommandtext\SetPos 255, 280
+		ftpcommandtext\SetPos 255, 250
 		ftpcommandtext\SetText "FTP Command"
 
 		entrycolsinput = loveframes.Create "textinput", prefsframe
-		entrycolsinput\SetPos 50, 310
+		entrycolsinput\SetPos 50, 280
 		entrycolsinput\SetWidth 200
 		entrycolsinput\SetText PREFS.ENTRIES_COLUMNS
 
 		entrycolstext = loveframes.Create "text", prefsframe
-		entrycolstext\SetPos 255, 310
+		entrycolstext\SetPos 255, 280
 		entrycolstext\SetText "Entries-Panel Columns"
 
 		entrylimitinput = loveframes.Create "textinput", prefsframe
-		entrylimitinput\SetPos 50, 340
+		entrylimitinput\SetPos 50, 310
 		entrylimitinput\SetWidth 200
 		entrylimitinput\SetText PREFS.ENTRIES_LIMIT
 
 		entrylimittext = loveframes.Create "text", prefsframe
-		entrylimittext\SetPos 255, 340
+		entrylimittext\SetPos 255, 310
 		entrylimittext\SetText "Max Entries-Panel Items"
 
 		applybutton = loveframes.Create "button", prefsframe
@@ -580,7 +569,6 @@ return {
 			elim = entrylimitinput\GetText!
 			fhost = ftphostinput\GetText!
 			fuser = ftpuserinput\GetText!
-			fpass = ftppassinput\GetText!
 			fpath = ftppathinput\GetText!
 			fcomm = ftpcommandinput\GetText!
 
@@ -609,7 +597,6 @@ return {
 			PREFS.ENTRIES_LIMIT = elim
 			PREFS.FTP_HOST = fhost
 			PREFS.FTP_USER = fuser
-			PREFS.FTP_PASS = fpass
 			PREFS.FTP_PATH = fpath
 			PREFS.FTP_COMMAND = fcomm
 
@@ -634,7 +621,7 @@ return {
 		nil
 
 	-- Create input window
-	buildInputFrame: (using PREFS) ->
+	buildInputFrame: (using PREFS, USER_FTP_PASSWORD) ->
 
 		inputframe = loveframes.Create "frame"
 		inputframe\SetName "Input"
@@ -698,11 +685,33 @@ return {
 			clearDynamicGUI!
 			updateDataAndGUI!
 			nil
-		
+
+		passinput = loveframes.Create "textinput", inputframe
+		passinput\SetPos 5, 220
+		passinput\SetWidth 190
+		passinput\SetEditable true
+		passinput\SetText "FTP Password"
+		passinput\SetTabReplacement ""
+
+		passinput.OnFocusGained = (object using nil) ->
+			object\SetText ""
+			nil
+
+		passinput.OnFocusLost = (object using nil) ->
+			if #tostring(object\GetText!) == 0
+				object\SetText "FTP Password"
+			nil
+
+		passinput.OnEnter = (object using USER_FTP_PASSWORD) ->
+			export USER_FTP_PASSWORD = object\GetText!
+			object\SetText ""
+			uploadFilesToWebspace!
+			nil
+
 		publishbutton = loveframes.Create "button", inputframe
-		publishbutton\SetPos 10, 215
-		publishbutton\SetSize 180, 20
-		publishbutton\SetText "Publish To HTML"
+		publishbutton\SetPos 10, 250
+		publishbutton\SetSize 88, 20
+		publishbutton\SetText "Publish HTML"
 
 		publishbutton.OnClick = (object using nil) ->
 			for k, v in pairs PREFS.INPUT_NAMES
@@ -712,17 +721,19 @@ return {
 			nil
 
 		uploadbutton = loveframes.Create "button", inputframe
-		uploadbutton\SetPos 10, 240
-		uploadbutton\SetSize 180, 20
+		uploadbutton\SetPos 102, 250
+		uploadbutton\SetSize 88, 20
 		uploadbutton\SetText "FTP To Web"
 		
-		uploadbutton.OnClick = (object using nil) ->
+		uploadbutton.OnClick = (object using USER_FTP_PASSWORD) ->
+			export USER_FTP_PASSWORD = passinput\GetText!
+			passinput\SetText "FTP Password"
 			uploadFilesToWebspace!
 			nil
 
 		refreshbutton = loveframes.Create "button", inputframe
-		refreshbutton\SetPos 10, 270
-		refreshbutton\SetSize 85, 20
+		refreshbutton\SetPos 10, 275
+		refreshbutton\SetSize 88, 20
 		refreshbutton\SetText "Refresh"
 
 		refreshbutton.OnClick = (object using nil) ->
@@ -731,8 +742,8 @@ return {
 			nil
 
 		prefsbutton = loveframes.Create "button", inputframe
-		prefsbutton\SetPos 105, 270
-		prefsbutton\SetSize 85, 20
+		prefsbutton\SetPos 102, 275
+		prefsbutton\SetSize 88, 20
 		prefsbutton\SetText "Preferences"
 
 		prefsbutton.OnClick = (object using nil) ->

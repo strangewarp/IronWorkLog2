@@ -34,6 +34,7 @@ love.load = function()
     end
   end
   HTML_TEMPLATE, _ = love.filesystem.read("template.html")
+  USER_FTP_PASSWORD = ""
   local userprefs = require("prefs")
   for k, v in pairs(userprefs) do
     PREFS[k] = v

@@ -449,7 +449,7 @@ return {
         local f, e = ftp.put({
           host = PREFS.FTP_HOST,
           user = PREFS.FTP_USER,
-          password = PREFS.FTP_PASS,
+          password = tostring(USER_FTP_PASSWORD),
           command = PREFS.FTP_COMMAND,
           argument = PREFS.FTP_PATH .. v,
           source = ltn12.source.string(fstring)
@@ -497,42 +497,33 @@ return {
     local ftpusertext = loveframes.Create("text", prefsframe)
     ftpusertext:SetPos(255, 190)
     ftpusertext:SetText("FTP User")
-    local ftppassinput = loveframes.Create("textinput", prefsframe)
-    ftppassinput:SetPos(50, 220)
-    ftppassinput:SetWidth(200)
-    ftppassinput:SetMasked(true)
-    ftppassinput:SetMaskChar("*")
-    ftppassinput:SetText(PREFS.FTP_PASS)
-    local ftppasstext = loveframes.Create("text", prefsframe)
-    ftppasstext:SetPos(255, 220)
-    ftppasstext:SetText("FTP Password")
     local ftppathinput = loveframes.Create("textinput", prefsframe)
-    ftppathinput:SetPos(50, 250)
+    ftppathinput:SetPos(50, 220)
     ftppathinput:SetWidth(200)
     ftppathinput:SetText(PREFS.FTP_PATH)
     local ftppathtext = loveframes.Create("text", prefsframe)
-    ftppathtext:SetPos(255, 250)
+    ftppathtext:SetPos(255, 220)
     ftppathtext:SetText("FTP Path")
     local ftpcommandinput = loveframes.Create("textinput", prefsframe)
-    ftpcommandinput:SetPos(50, 280)
+    ftpcommandinput:SetPos(50, 250)
     ftpcommandinput:SetWidth(200)
     ftpcommandinput:SetText(PREFS.FTP_COMMAND)
     local ftpcommandtext = loveframes.Create("text", prefsframe)
-    ftpcommandtext:SetPos(255, 280)
+    ftpcommandtext:SetPos(255, 250)
     ftpcommandtext:SetText("FTP Command")
     local entrycolsinput = loveframes.Create("textinput", prefsframe)
-    entrycolsinput:SetPos(50, 310)
+    entrycolsinput:SetPos(50, 280)
     entrycolsinput:SetWidth(200)
     entrycolsinput:SetText(PREFS.ENTRIES_COLUMNS)
     local entrycolstext = loveframes.Create("text", prefsframe)
-    entrycolstext:SetPos(255, 310)
+    entrycolstext:SetPos(255, 280)
     entrycolstext:SetText("Entries-Panel Columns")
     local entrylimitinput = loveframes.Create("textinput", prefsframe)
-    entrylimitinput:SetPos(50, 340)
+    entrylimitinput:SetPos(50, 310)
     entrylimitinput:SetWidth(200)
     entrylimitinput:SetText(PREFS.ENTRIES_LIMIT)
     local entrylimittext = loveframes.Create("text", prefsframe)
-    entrylimittext:SetPos(255, 340)
+    entrylimittext:SetPos(255, 310)
     entrylimittext:SetText("Max Entries-Panel Items")
     local applybutton = loveframes.Create("button", prefsframe)
     applybutton:SetPos(490, 495)
@@ -546,7 +537,6 @@ return {
       local elim = entrylimitinput:GetText()
       local fhost = ftphostinput:GetText()
       local fuser = ftpuserinput:GetText()
-      local fpass = ftppassinput:GetText()
       local fpath = ftppathinput:GetText()
       local fcomm = ftpcommandinput:GetText()
       dtab = (string.match(dtab, '%d+') and dtab) or 1
@@ -568,7 +558,6 @@ return {
       PREFS.ENTRIES_LIMIT = elim
       PREFS.FTP_HOST = fhost
       PREFS.FTP_USER = fuser
-      PREFS.FTP_PASS = fpass
       PREFS.FTP_PATH = fpath
       PREFS.FTP_COMMAND = fcomm
       savePrefs()
@@ -652,10 +641,32 @@ return {
       updateDataAndGUI()
       return nil
     end
+    local passinput = loveframes.Create("textinput", inputframe)
+    passinput:SetPos(5, 220)
+    passinput:SetWidth(190)
+    passinput:SetEditable(true)
+    passinput:SetText("FTP Password")
+    passinput:SetTabReplacement("")
+    passinput.OnFocusGained = function(object)
+      object:SetText("")
+      return nil
+    end
+    passinput.OnFocusLost = function(object)
+      if #tostring(object:GetText()) == 0 then
+        object:SetText("FTP Password")
+      end
+      return nil
+    end
+    passinput.OnEnter = function(object)
+      USER_FTP_PASSWORD = object:GetText()
+      object:SetText("")
+      uploadFilesToWebspace()
+      return nil
+    end
     local publishbutton = loveframes.Create("button", inputframe)
-    publishbutton:SetPos(10, 215)
-    publishbutton:SetSize(180, 20)
-    publishbutton:SetText("Publish To HTML")
+    publishbutton:SetPos(10, 250)
+    publishbutton:SetSize(88, 20)
+    publishbutton:SetText("Publish HTML")
     publishbutton.OnClick = function(object)
       for k, v in pairs(PREFS.INPUT_NAMES) do
         IN_TASK[k] = uinput[k]:GetText()
@@ -665,16 +676,18 @@ return {
       return nil
     end
     local uploadbutton = loveframes.Create("button", inputframe)
-    uploadbutton:SetPos(10, 240)
-    uploadbutton:SetSize(180, 20)
+    uploadbutton:SetPos(102, 250)
+    uploadbutton:SetSize(88, 20)
     uploadbutton:SetText("FTP To Web")
     uploadbutton.OnClick = function(object)
+      USER_FTP_PASSWORD = passinput:GetText()
+      passinput:SetText("FTP Password")
       uploadFilesToWebspace()
       return nil
     end
     local refreshbutton = loveframes.Create("button", inputframe)
-    refreshbutton:SetPos(10, 270)
-    refreshbutton:SetSize(85, 20)
+    refreshbutton:SetPos(10, 275)
+    refreshbutton:SetSize(88, 20)
     refreshbutton:SetText("Refresh")
     refreshbutton.OnClick = function(object)
       clearDynamicGUI()
@@ -682,8 +695,8 @@ return {
       return nil
     end
     local prefsbutton = loveframes.Create("button", inputframe)
-    prefsbutton:SetPos(105, 270)
-    prefsbutton:SetSize(85, 20)
+    prefsbutton:SetPos(102, 275)
+    prefsbutton:SetSize(88, 20)
     prefsbutton:SetText("Preferences")
     prefsbutton.OnClick = function(object)
       buildPrefsWindow()
