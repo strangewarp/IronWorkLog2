@@ -198,20 +198,14 @@ return {
     return outhex
   end,
   dateCountBack = function(iyear, imonth, iday)
-    iday = iday - 1
-    if iday < 1 then
-      imonth = imonth - 1
-      if imonth < 1 then
-        iyear = iyear - 1
-        imonth = 12
-      end
-      iday = tonumber(os.date('*t', os.time({
-        year = iyear,
-        month = imonth,
-        day = 0
-      }))['day'])
-    end
-    return iyear, imonth, iday
+    local curtime = os.time({
+      year = iyear,
+      month = imonth,
+      day = iday
+    })
+    local minustime = curtime - (24 * 60 * 60)
+    local olddate = os.date('*t', minustime)
+    return olddate.year, olddate.month, olddate.day
   end,
   getOldestTime = function()
     local oldest = os.time()

@@ -167,15 +167,12 @@ return {
 	-- Count backwards by 1 day from an arbitrary date
 	dateCountBack: (iyear, imonth, iday using nil) ->
 
-		iday -= 1
-		if iday < 1
-			imonth -= 1
-			if imonth < 1
-				iyear -= 1
-				imonth = 12
-			iday = tonumber os.date('*t', os.time{year: iyear, month: imonth, day: 0})['day']
+		curtime = os.time {year: iyear, month: imonth, day: iday}
+		minustime = curtime - (24 * 60 * 60)
+		olddate = os.date '*t', minustime
 
-		iyear, imonth, iday
+		olddate.year, olddate.month, olddate.day
+
 
 	-- Discern how far in the past the oldest work entry was logged, down to day-wide resolution
 	getOldestTime: (using data) ->
